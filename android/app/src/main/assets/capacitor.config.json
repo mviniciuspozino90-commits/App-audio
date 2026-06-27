@@ -1,0 +1,6 @@
+{
+	"appId": "com.i9fit.gymvoice",
+	"appName": "I9 Fit Gym Voice",
+	"webDir": "dist",
+	"bundledWebRuntime": false
+}

@@ -7,8 +7,7 @@ import { LogView } from './components/LogView';
 import { getAudios, getSchedules, getLogs, saveLog, saveAudio, saveSchedule } from './utils/db';
 import { 
   Clock, Info, VolumeX, Volume2, ShieldCheck, Play, HelpCircle, 
-  Settings, CheckCircle2, ChevronRight, Speaker, Sparkles, Activity,
-  Globe, RefreshCw, Wifi, AlertTriangle
+  Settings, CheckCircle2, ChevronRight, Speaker, Sparkles, Activity
 } from 'lucide-react';
 
 const DAYS_NAME = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
@@ -25,92 +24,6 @@ export default function App() {
   const [currentDateTime, setCurrentDateTime] = useState<Date>(new Date());
   const [activeAnnouncement, setActiveAnnouncement] = useState<{ title: string; audioName: string } | null>(null);
   const [showInstructions, setShowInstructions] = useState(true);
-
-  // Network Atomic Time sync state
-  const [syncState, setSyncState] = useState<{
-    status: 'syncing' | 'synced' | 'failed' | 'idle';
-    offset: number; // in ms
-    latency: number; // in ms
-    lastSync: Date | null;
-    method: string;
-  }>({
-    status: 'idle',
-    offset: 0,
-    latency: 0,
-    lastSync: null,
-    method: ''
-  });
-
-  const performNetworkSync = async () => {
-    setSyncState(prev => ({ ...prev, status: 'syncing' }));
-    const startTime = Date.now();
-    try {
-      // Use a CORS-friendly public high-precision NTP-like API
-      const response = await fetch('https://worldtimeapi.org/api/timezone/Etc/UTC', {
-        signal: AbortSignal.timeout(2500)
-      });
-      
-      const endTime = Date.now();
-      const latency = endTime - startTime;
-
-      if (response.ok) {
-        const data = await response.json();
-        const serverTime = new Date(data.utc_datetime).getTime();
-        
-        // Correct for RTT latency (assume symmetric)
-        const correctedServerTime = serverTime + (latency / 2);
-        const offset = correctedServerTime - endTime;
-
-        setSyncState({
-          status: 'synced',
-          offset,
-          latency,
-          lastSync: new Date(),
-          method: 'Horário Atômico NTP'
-        });
-        return;
-      }
-    } catch (e) {
-      console.warn('Failing over to I9 Server sync due to public API error:', e);
-    }
-
-    // Fallback: request from the web server with cache buster to prevent cached HTTP headers
-    try {
-      const startTimeFallback = Date.now();
-      const response = await fetch(`${window.location.origin}/index.html?cb=${Date.now()}`, {
-        method: 'HEAD',
-        cache: 'no-store',
-        signal: AbortSignal.timeout(2500)
-      });
-      const endTimeFallback = Date.now();
-      const latency = endTimeFallback - startTimeFallback;
-
-      const dateHeader = response.headers.get('Date');
-      if (dateHeader) {
-        const serverTime = Date.parse(dateHeader);
-        const correctedServerTime = serverTime + (latency / 2);
-        const offset = correctedServerTime - endTimeFallback;
-
-        setSyncState({
-          status: 'synced',
-          offset,
-          latency,
-          lastSync: new Date(),
-          method: 'Servidor I9 Fit (CORS Safe)'
-        });
-      } else {
-        throw new Error('Nenhum header de data retornado.');
-      }
-    } catch (e) {
-      console.error('Falha completa na sincronização de rede:', e);
-      setSyncState(prev => ({
-        ...prev,
-        status: 'failed',
-        lastSync: prev.lastSync || new Date(),
-        method: 'Horário Local (Sem Conexão)'
-      }));
-    }
-  };
 
   // Ref tracking
   const lastTriggeredRef = useRef<Record<string, string>>({}); // scheduleId -> "YYYY-MM-DD HH:MM"
@@ -214,31 +127,21 @@ export default function App() {
 
   useEffect(() => {
     loadData();
-    performNetworkSync();
-    
-    // Periodically re-sync every 3 minutes to keep accuracy and verify alignment
-    const syncInterval = setInterval(() => {
-      performNetworkSync();
-    }, 180000);
-
-    return () => clearInterval(syncInterval);
   }, []);
 
   // Sync Clock & Check Scheduler Ticks
   useEffect(() => {
     const interval = setInterval(() => {
-      const localNow = new Date();
-      // Apply offset to guarantee atomic time alignment
-      const correctedNow = new Date(localNow.getTime() + syncState.offset);
-      setCurrentDateTime(correctedNow);
-      checkSchedules(correctedNow);
+      const now = new Date();
+      setCurrentDateTime(now);
+      checkSchedules(now);
     }, 1000);
 
     return () => {
       clearInterval(interval);
       if (fadeIntervalRef.current) clearInterval(fadeIntervalRef.current);
     };
-  }, [schedules, audios, syncState.offset]);
+  }, [schedules, audios]);
 
   // Scheduler Engine
   const checkSchedules = (now: Date) => {
@@ -500,68 +403,19 @@ export default function App() {
             </div>
           </div>
 
-          {/* Clock & Sync Panel */}
-          <div className="flex flex-col sm:flex-row items-center gap-4">
-            {/* Network Atomic Sync Indicator */}
-            <div id="atomic-sync-panel" className="flex flex-col items-center md:items-end justify-center bg-zinc-900/40 border border-zinc-800/80 px-4 py-2.5 rounded-xl text-xs font-mono min-w-[210px]">
-              <div className="flex items-center gap-2">
-                {syncState.status === 'syncing' ? (
-                  <RefreshCw className="w-4 h-4 text-blue-400 animate-spin" />
-                ) : syncState.status === 'synced' ? (
-                  <Globe className="w-4 h-4 text-emerald-400 animate-pulse" />
-                ) : (
-                  <AlertTriangle className="w-4 h-4 text-amber-500" />
-                )}
-                <span className="font-bold text-zinc-200">Sincronia Atômica</span>
-              </div>
-              
-              <div className="text-[10px] text-zinc-400 mt-1.5 text-center md:text-right">
-                {syncState.status === 'syncing' && (
-                  <span className="text-blue-400 animate-pulse">Sincronizando...</span>
-                )}
-                {syncState.status === 'synced' && (
-                  <div className="flex flex-col items-center md:items-end leading-tight">
-                    <span>
-                      Deriva: <span className={Math.abs(syncState.offset) > 1000 ? "text-amber-400 font-extrabold font-mono" : "text-emerald-400 font-extrabold font-mono"}>
-                        {syncState.offset >= 0 ? '+' : ''}{(syncState.offset / 1000).toFixed(3)}s
-                      </span>
-                    </span>
-                    <span className="text-zinc-500 text-[9px] mt-0.5">
-                      Ping: {syncState.latency}ms • NTP Pool
-                    </span>
-                  </div>
-                )}
-                {syncState.status === 'failed' && (
-                  <span className="text-amber-500 font-bold">Usando Hora Local</span>
-                )}
-              </div>
-              
-              <button
-                id="sync-now-button"
-                onClick={performNetworkSync}
-                disabled={syncState.status === 'syncing'}
-                className="mt-2 w-full py-1 text-[9px] font-bold uppercase tracking-wider bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-900 text-zinc-300 hover:text-neon rounded-lg border border-zinc-700 transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
-                title="Sincronizar relógio com horário atômico"
-              >
-                <RefreshCw className={`w-3 h-3 ${syncState.status === 'syncing' ? 'animate-spin' : ''}`} />
-                Sincronizar
-              </button>
+          {/* Clock Dashboard & Active status */}
+          <div id="clock-dashboard-panel" className="text-center md:text-right flex flex-col items-center md:items-end bg-zinc-900/40 border border-zinc-800/80 px-5 py-2.5 rounded-xl">
+            <div className="text-3xl md:text-5xl font-mono leading-none tracking-tighter text-white font-bold tabular-nums">
+              {formattedTime}
             </div>
-
-            {/* Clock Dashboard & Active status */}
-            <div id="clock-dashboard-panel" className="text-center md:text-right flex flex-col items-center md:items-end bg-zinc-900/40 border border-zinc-800/80 px-5 py-2.5 rounded-xl min-w-[200px]">
-              <div className="text-3xl md:text-5xl font-mono leading-none tracking-tighter text-white font-bold tabular-nums">
-                {formattedTime}
-              </div>
-              <div className="flex items-center justify-center md:justify-end mt-2 gap-2">
-                <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wide">
-                  {formattedDay} • {formattedDate}
-                </span>
-                <div className="w-2 h-2 bg-neon rounded-full animate-pulse"></div>
-                <span className="text-[10px] uppercase font-bold tracking-wider text-zinc-500">
-                  ACTIVE
-                </span>
-              </div>
+            <div className="flex items-center justify-center md:justify-end mt-2 gap-2">
+              <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wide">
+                {formattedDay} • {formattedDate}
+              </span>
+              <div className="w-2 h-2 bg-neon rounded-full animate-pulse"></div>
+              <span className="text-[10px] uppercase font-bold tracking-wider text-zinc-500">
+                ACTIVE
+              </span>
             </div>
           </div>
         </div>
