@@ -1,0 +1,6 @@
+{
+  "name": "I9 Fit Gym Voice",
+  "description": "Painel de controle de música e programador de anúncios com pausa automática para academias com as cores Preto e Amarelo.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
