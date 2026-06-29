@@ -26,9 +26,37 @@ const PRESET_ANNOUNCEMENTS_DATABASE = [
     duration: 10
   },
   {
+    id: "db_zumba",
+    name: "Aula de Zumba e Ritmos",
+    text: "Atenção galera! Em 10 minutos começará nossa aula super animada de Zumba e Ritmos na sala de dança. Venha queimar muitas calorias com as melhores coreografias! Esperamos vocês!",
+    category: "Aulas",
+    duration: 11
+  },
+  {
+    id: "db_pilates",
+    name: "Aula de Pilates e Alongamento",
+    text: "Atenção alunos: nossa aula de Mat Pilates e Alongamento Integrado começará em 5 minutos na sala zen. Venha melhorar sua flexibilidade, postura e respiração!",
+    category: "Aulas",
+    duration: 10
+  },
+  {
     id: "db_toalha",
     name: "Campanha: Uso de Toalha",
     text: "Lembrete de convivência: para maior higiene de todos, é obrigatório o uso de toalha de treino individual para cobrir e higienizar os aparelhos após o seu uso. Agradecemos a colaboração!",
+    category: "Higiene",
+    duration: 11
+  },
+  {
+    id: "db_colchonete",
+    name: "Higiene: Limpeza de Aparelhos",
+    text: "Atenção atletas: lembramos que temos álcool em spray e papel toalha distribuídos pela sala de musculação. Por favor, faça a higienização dos aparelhos e colchonetes após utilizá-los!",
+    category: "Higiene",
+    duration: 11
+  },
+  {
+    id: "db_garrafa",
+    name: "Higiene: Garrafinha Individual",
+    text: "Lembrete importante: traga sempre sua garrafinha de água individual para os treinos. Nossos bebedouros estão prontos para reabastecer sua hidratação de forma prática e higiênica!",
     category: "Higiene",
     duration: 11
   },
@@ -38,6 +66,34 @@ const PRESET_ANNOUNCEMENTS_DATABASE = [
     text: "Não se esqueça de beber água! Manter-se hidratado durante a atividade física evita fadiga muscular, previne cãibras e mantém seu rendimento no nível máximo. Hidrate-se!",
     category: "Dica",
     duration: 10
+  },
+  {
+    id: "db_cardio",
+    name: "Dica de Saúde: Treino de Cardio",
+    text: "Você já fez o seu cardio hoje? Incluir exercícios aeróbicos na sua rotina fortalece o coração, aumenta a queima de gordura e dá mais disposição para o seu dia a dia. Pratique!",
+    category: "Dica",
+    duration: 10
+  },
+  {
+    id: "db_alongamento",
+    name: "Aviso: Alongamento Pós-Treino",
+    text: "Treino concluído? Lembre-se de fazer um alongamento leve para relaxar a musculatura e melhorar sua flexibilidade. Sua recuperação muscular agradece!",
+    category: "Dica",
+    duration: 9
+  },
+  {
+    id: "db_celular",
+    name: "Etiqueta: Celular nos Aparelhos",
+    text: "Dica de convivência I9 Fit: evite ocupar os aparelhos e bancos enquanto mexe no celular. O treino flui melhor e todos conseguem treinar com agilidade. Vamos compartilhar o espaço de forma consciente!",
+    category: "Etiqueta",
+    duration: 12
+  },
+  {
+    id: "db_silencio",
+    name: "Etiqueta: Guardar Equipamentos",
+    text: "Treinar pesado é ótimo, mas fazer barulho excessivo ao largar as barras e anilhas pode danificar os equipamentos e incomodar os outros alunos. Controle o movimento até o final e cuide do nosso espaço!",
+    category: "Etiqueta",
+    duration: 12
   },
   {
     id: "db_fechamento_15",
@@ -54,18 +110,25 @@ const PRESET_ANNOUNCEMENTS_DATABASE = [
     duration: 12
   },
   {
-    id: "db_alongamento",
-    name: "Aviso: Alongamento Pós-Treino",
-    text: "Treino concluído? Lembre-se de fazer um alongamento leve para relaxar a musculatura e melhorar sua flexibilidade. Sua recuperação muscular agradece!",
-    category: "Dica",
-    duration: 9
-  },
-  {
     id: "db_shake",
     name: "Promoção: Shakes na Recepção",
     text: "Procurando aquele pós-treino imediato? Passe em nossa recepção e confira as promoções especiais em shakes de Whey Protein e bebidas isotônicas. Garanta sua nutrição agora mesmo!",
     category: "Promoção",
     duration: 11
+  },
+  {
+    id: "db_personal",
+    name: "Promoção: Personal Trainer",
+    text: "Quer acelerar seus resultados? Nossa academia conta com uma equipe especializada de Personal Trainers para montar treinos personalizados de acordo com seus objetivos. Consulte condições na recepção!",
+    category: "Promoção",
+    duration: 12
+  },
+  {
+    id: "db_suplementos",
+    name: "Promoção: Suplementação Exclusiva",
+    text: "Atenção! Conheça nossa linha exclusiva de suplementos alimentares na recepção da academia. Temos Whey, Creatina, pré-treinos e barras de proteína de marcas líderes para maximizar seus ganhos!",
+    category: "Promoção",
+    duration: 12
   },
   {
     id: "db_avaliacao",
@@ -75,6 +138,195 @@ const PRESET_ANNOUNCEMENTS_DATABASE = [
     duration: 10
   }
 ];
+
+export interface VoiceProfile {
+  id: string;
+  name: string;
+  gender: 'F' | 'M' | 'E'; // Female, Male, Special/Effect
+  pitch: number;
+  rate: number;
+  description: string;
+  avatar: string;
+}
+
+export const VOICE_PROFILES: VoiceProfile[] = [
+  {
+    id: 'ana_standard',
+    name: 'Ana (Feminina Padrão)',
+    gender: 'F',
+    pitch: 1.1,
+    rate: 1.0,
+    description: 'Voz feminina clara, ideal para avisos gerais e comunicados do dia a dia.',
+    avatar: '👩'
+  },
+  {
+    id: 'camila_promo',
+    name: 'Camila (Feminina Rápida)',
+    gender: 'F',
+    pitch: 1.25,
+    rate: 1.15,
+    description: 'Voz feminina enérgica e animada, perfeita para anúncios promocionais e eventos.',
+    avatar: '⚡'
+  },
+  {
+    id: 'juliana_soft',
+    name: 'Juliana (Feminina Suave)',
+    gender: 'F',
+    pitch: 0.95,
+    rate: 0.85,
+    description: 'Voz feminina pausada e gentil, excelente para dicas de saúde ou relaxamento.',
+    avatar: '🌸'
+  },
+  {
+    id: 'daniel_standard',
+    name: 'Daniel (Masculino Padrão)',
+    gender: 'M',
+    pitch: 0.95,
+    rate: 1.0,
+    description: 'Voz masculina tradicional, clara e direta para qualquer tipo de anúncio.',
+    avatar: '👨'
+  },
+  {
+    id: 'ricardo_heavy',
+    name: 'Ricardo (Masculino Forte)',
+    gender: 'M',
+    pitch: 0.8,
+    rate: 1.05,
+    description: 'Voz masculina grave e enérgica, ideal para chamadas de Spinning ou Crossfit.',
+    avatar: '🔥'
+  },
+  {
+    id: 'bruno_deep',
+    name: 'Bruno (Grave e Formal)',
+    gender: 'M',
+    pitch: 0.7,
+    rate: 0.9,
+    description: 'Voz masculina profunda e solene, ótima para comunicados importantes de funcionamento.',
+    avatar: '💪'
+  },
+  {
+    id: 'cyborg_fx',
+    name: 'Cyborg 9000 (Robótica)',
+    gender: 'E',
+    pitch: 0.5,
+    rate: 1.2,
+    description: 'Voz robótica sci-fi com forte distorção mecânica. Super marcante para treino!',
+    avatar: '🤖'
+  },
+  {
+    id: 'helium_fx',
+    name: 'Voz Divertida (Aguda)',
+    gender: 'E',
+    pitch: 1.8,
+    rate: 0.85,
+    description: 'Voz super aguda para avisos descontraídos ou momentos divertidos na academia.',
+    avatar: '🎈'
+  }
+];
+
+export function getVoiceGender(voiceName: string): 'F' | 'M' | 'U' {
+  const name = voiceName.toLowerCase();
+  if (
+    name.includes('maria') || 
+    name.includes('ana') || 
+    name.includes('luciana') || 
+    name.includes('joana') || 
+    name.includes('gabriela') || 
+    name.includes('helena') || 
+    name.includes('amalia') || 
+    name.includes('amália') || 
+    name.includes('zira') || 
+    name.includes('yasmin') || 
+    name.includes('sara') || 
+    name.includes('cristina') || 
+    name.includes('vitoria') || 
+    name.includes('vitória') || 
+    name.includes('claudia') || 
+    name.includes('cláudia') || 
+    name.includes('marta') || 
+    name.includes('google português') || 
+    name.includes('google português do brasil') ||
+    name.includes('female') ||
+    name.includes('woman') ||
+    name.includes('girl') ||
+    name.includes('lucia') ||
+    name.includes('lúcia') ||
+    name.includes('siri female') ||
+    name.includes('siri 1') ||
+    name.includes('samantha') ||
+    name.includes('karen') ||
+    name.includes('moira') ||
+    name.includes('tessa') ||
+    name.includes('veena') ||
+    name.includes('fiona')
+  ) {
+    return 'F';
+  }
+  if (
+    name.includes('daniel') || 
+    name.includes('felipe') || 
+    name.includes('carlos') || 
+    name.includes('filipe') || 
+    name.includes('ricardo') || 
+    name.includes('joão') || 
+    name.includes('joao') || 
+    name.includes('antonio') || 
+    name.includes('antônio') || 
+    name.includes('gustavo') || 
+    name.includes('pedro') || 
+    name.includes('thiago') || 
+    name.includes('tiago') || 
+    name.includes('marcos') || 
+    name.includes('siri male') ||
+    name.includes('male') ||
+    name.includes('man') ||
+    name.includes('boy') ||
+    name.includes('guy') ||
+    name.includes('david') ||
+    name.includes('george') ||
+    name.includes('ravi')
+  ) {
+    return 'M';
+  }
+  if (name.includes('portuguese') || name.includes('português') || name.includes('pt-br') || name.includes('pt-pt')) {
+    return 'F';
+  }
+  return 'U';
+}
+
+export function getFriendlyVoiceName(voice: SpeechSynthesisVoice): string {
+  const name = voice.name;
+  const nameLower = name.toLowerCase();
+  
+  if (nameLower.includes('maria')) return 'Maria (Feminina Padrão)';
+  if (nameLower.includes('daniel')) return 'Daniel (Masculina Padrão)';
+  if (nameLower.includes('gabriela') || nameLower.includes('google português do brasil') || nameLower.includes('google português')) {
+    return 'Gabriela (Feminina Google)';
+  }
+  if (nameLower.includes('luciana')) return 'Luciana (Feminina macOS)';
+  if (nameLower.includes('felipe')) return 'Felipe (Masculina macOS)';
+  if (nameLower.includes('joana')) return 'Joana (Feminina macOS)';
+  if (nameLower.includes('filipe')) return 'Filipe (Masculina macOS)';
+  if (nameLower.includes('helena')) return 'Helena (Feminina)';
+  if (nameLower.includes('sara')) return 'Sara (Feminina)';
+  if (nameLower.includes('amalia') || nameLower.includes('amália')) return 'Amália (Feminina - Portugal)';
+  
+  let cleanName = name
+    .replace('Microsoft', '')
+    .replace('Desktop', '')
+    .replace('TTS', '')
+    .replace('Natural', '')
+    .replace('Voice', '')
+    .trim();
+    
+  const gender = getVoiceGender(name);
+  if (gender === 'F') {
+    return `${cleanName} (Voz Feminina)`;
+  } else if (gender === 'M') {
+    return `${cleanName} (Voz Masculina)`;
+  }
+  return cleanName;
+}
 
 interface AudioCreatorProps {
   audios: AnnouncementAudio[];
@@ -97,6 +349,8 @@ export function AudioCreator({ audios, onAudioCreated, onAudioDeleted }: AudioCr
   const [ttsVoice, setTtsVoice] = useState<string>('');
   const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [isSpeakingTts, setIsSpeakingTts] = useState(false);
+  const [selectedProfileId, setSelectedProfileId] = useState<string>('ana_standard');
+  const [voiceGenderFilter, setVoiceGenderFilter] = useState<'all' | 'F' | 'M'>('all');
 
   // Recorder State
   const [isRecording, setIsRecording] = useState(false);
@@ -133,7 +387,8 @@ export function AudioCreator({ audios, onAudioCreated, onAudioDeleted }: AudioCr
 
         // Select default Portuguese voice if available
         if (ptVoices.length > 0 && !ttsVoice) {
-          setTtsVoice(ptVoices[0].name);
+          const femalePt = ptVoices.find(v => getVoiceGender(v.name) === 'F');
+          setTtsVoice(femalePt ? femalePt.name : ptVoices[0].name);
         } else if (voices.length > 0 && !ttsVoice) {
           setTtsVoice(voices[0].name);
         }
@@ -145,6 +400,28 @@ export function AudioCreator({ audios, onAudioCreated, onAudioDeleted }: AudioCr
       window.speechSynthesis.onvoiceschanged = updateVoices;
     }
   }, []);
+
+  const applyVoiceProfile = (profileId: string) => {
+    const profile = VOICE_PROFILES.find(p => p.id === profileId);
+    if (!profile) return;
+
+    setSelectedProfileId(profileId);
+    setTtsPitch(profile.pitch);
+    setTtsRate(profile.rate);
+
+    if (profile.gender === 'F' || profile.gender === 'M') {
+      const bestVoice = availableVoices.find(v => v.lang.startsWith('pt') && getVoiceGender(v.name) === profile.gender);
+      if (bestVoice) {
+        setTtsVoice(bestVoice.name);
+        // Sync the gender filter with the selected profile's gender
+        setVoiceGenderFilter(profile.gender);
+      } else {
+        // Fallback to any Portuguese voice
+        const ptVoice = availableVoices.find(v => v.lang.startsWith('pt'));
+        if (ptVoice) setTtsVoice(ptVoice.name);
+      }
+    }
+  };
 
   // Recorder timer effect
   useEffect(() => {
@@ -696,7 +973,183 @@ export function AudioCreator({ audios, onAudioCreated, onAudioDeleted }: AudioCr
 
               {/* Text To Speech Tab Content */}
               {activeTab === 'tts' && (
-                <div className="space-y-4 animate-fade-in">
+                <div className="space-y-4.5 animate-fade-in">
+                  
+                  {/* Voice Profile Cards */}
+                  <div className="space-y-1.5">
+                    <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
+                      Selecione um Perfil de Voz (Feminino, Masculino ou Efeitos)
+                    </label>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      {VOICE_PROFILES.map((profile) => {
+                        const isSelected = selectedProfileId === profile.id;
+                        return (
+                          <button
+                            key={profile.id}
+                            type="button"
+                            onClick={() => applyVoiceProfile(profile.id)}
+                            className={`p-2 rounded-xl border text-left transition-all flex flex-col justify-between h-[86px] cursor-pointer ${
+                              isSelected
+                                ? 'bg-neon/10 border-neon text-white shadow-md shadow-neon/5'
+                                : 'bg-zinc-900/40 border-zinc-850 hover:border-zinc-700 text-zinc-300 hover:bg-zinc-900/85'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between w-full">
+                              <span className="text-base leading-none">{profile.avatar}</span>
+                              <span className={`text-[8px] px-1.5 py-0.5 rounded font-black uppercase font-mono leading-none ${
+                                profile.gender === 'F' 
+                                  ? 'bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-500/20' 
+                                  : profile.gender === 'M' 
+                                    ? 'bg-blue-500/20 text-blue-300 border border-blue-500/20' 
+                                    : 'bg-amber-500/20 text-amber-300 border border-amber-500/20'
+                              }`}>
+                                {profile.gender === 'F' ? 'FEM' : profile.gender === 'M' ? 'MASC' : 'FX'}
+                              </span>
+                            </div>
+                            <div className="mt-1 min-w-0">
+                              <p className="text-[10px] font-black uppercase truncate leading-tight text-white">{profile.name.split(' ')[0]}</p>
+                              <p className="text-[8px] text-zinc-500 font-medium leading-normal line-clamp-2 mt-0.5">{profile.description}</p>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Sliders for Pitch and Rate */}
+                  <div className="grid grid-cols-2 gap-3 bg-zinc-950/80 p-3.5 rounded-xl border border-zinc-850">
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
+                          Tom da Voz (Grave/Agudo)
+                        </label>
+                        <span className="text-[9px] font-mono font-black text-neon bg-neon/10 px-1.5 py-0.5 rounded border border-neon/10">
+                          {ttsPitch.toFixed(2)}x
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min="0.5"
+                        max="2.0"
+                        step="0.05"
+                        value={ttsPitch}
+                        onChange={(e) => {
+                          setTtsPitch(parseFloat(e.target.value));
+                          setSelectedProfileId(''); // Clear profile active state since user customized
+                        }}
+                        className="w-full h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-neon focus:outline-none"
+                      />
+                      <div className="flex justify-between text-[8px] text-zinc-600 font-mono mt-1 font-bold">
+                        <span>GRAVE (0.5)</span>
+                        <span>NORMAL</span>
+                        <span>AGUDO (2.0)</span>
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
+                          Velocidade da Fala
+                        </label>
+                        <span className="text-[9px] font-mono font-black text-neon bg-neon/10 px-1.5 py-0.5 rounded border border-neon/10">
+                          {ttsRate.toFixed(2)}x
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min="0.5"
+                        max="2.0"
+                        step="0.05"
+                        value={ttsRate}
+                        onChange={(e) => {
+                          setTtsRate(parseFloat(e.target.value));
+                          setSelectedProfileId(''); // Clear profile active state since user customized
+                        }}
+                        className="w-full h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-neon focus:outline-none"
+                      />
+                      <div className="flex justify-between text-[8px] text-zinc-600 font-mono mt-1 font-bold">
+                        <span>LENTO (0.5)</span>
+                        <span>NORMAL</span>
+                        <span>RÁPIDO (2.0)</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Engine Selection and Filters */}
+                  <div className="grid grid-cols-1 md:grid-cols-12 gap-3.5 bg-zinc-900/25 p-3 rounded-xl border border-zinc-850">
+                    {/* Gender filter */}
+                    <div className="md:col-span-5 space-y-1">
+                      <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
+                        Filtrar Lista de Vozes
+                      </label>
+                      <div className="flex bg-zinc-950 p-1 rounded-lg border border-zinc-850 text-[9px] font-black tracking-wider">
+                        <button
+                          type="button"
+                          onClick={() => setVoiceGenderFilter('all')}
+                          className={`flex-1 py-1 rounded text-center transition-all ${
+                            voiceGenderFilter === 'all' ? 'bg-zinc-800 text-white font-extrabold' : 'text-zinc-500 hover:text-zinc-300'
+                          }`}
+                        >
+                          TODAS
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setVoiceGenderFilter('F')}
+                          className={`flex-1 py-1 rounded text-center transition-all flex items-center justify-center gap-1 ${
+                            voiceGenderFilter === 'F' ? 'bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-500/10 font-extrabold' : 'text-zinc-500 hover:text-zinc-300'
+                          }`}
+                        >
+                          <span>👩</span> FEMININAS
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setVoiceGenderFilter('M')}
+                          className={`flex-1 py-1 rounded text-center transition-all flex items-center justify-center gap-1 ${
+                            voiceGenderFilter === 'M' ? 'bg-blue-500/20 text-blue-300 border border-blue-500/10 font-extrabold' : 'text-zinc-500 hover:text-zinc-300'
+                          }`}
+                        >
+                          <span>👨</span> MASCULINAS
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Available engines select dropdown */}
+                    <div className="md:col-span-7 space-y-1">
+                      <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
+                        Mecanismo de Voz do Navegador
+                      </label>
+                      <select
+                        id="tts-voice-select"
+                        value={ttsVoice}
+                        onChange={(e) => {
+                          setTtsVoice(e.target.value);
+                          setSelectedProfileId(''); // Clear selected preset card since user custom selected voice
+                        }}
+                        className="w-full text-xs border border-zinc-800 rounded-lg px-2.5 py-1.5 bg-zinc-950 text-zinc-300 focus:outline-none focus:border-neon cursor-pointer font-bold h-[31px]"
+                      >
+                        {availableVoices
+                          .filter(v => {
+                            if (voiceGenderFilter === 'all') return true;
+                            const voiceGender = getVoiceGender(v.name);
+                            return voiceGender === voiceGenderFilter || voiceGender === 'U';
+                          })
+                          .map((voice, idx) => (
+                            <option key={idx} value={voice.name} className="bg-zinc-950 text-white">
+                              {getFriendlyVoiceName(voice)} ({voice.lang})
+                            </option>
+                          ))}
+                        {availableVoices.filter(v => {
+                          if (voiceGenderFilter === 'all') return true;
+                          const voiceGender = getVoiceGender(v.name);
+                          return voiceGender === voiceGenderFilter || voiceGender === 'U';
+                        }).length === 0 && (
+                          <option className="bg-zinc-950 text-white">Nenhuma voz compatível nesta categoria</option>
+                        )}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Text Input area */}
                   <div>
                     <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1">Texto que será falado</label>
                     <textarea
@@ -714,40 +1167,22 @@ export function AudioCreator({ audios, onAudioCreated, onAudioDeleted }: AudioCr
                     />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1">Voz (Navegador)</label>
-                      <select
-                        id="tts-voice-select"
-                        value={ttsVoice}
-                        onChange={(e) => setTtsVoice(e.target.value)}
-                        className="w-full text-xs border border-zinc-800 rounded-lg p-2 bg-zinc-900 text-zinc-300 focus:outline-none focus:border-neon"
-                      >
-                        {availableVoices.map((voice, idx) => (
-                          <option key={idx} value={voice.name} className="bg-zinc-950 text-white">
-                            {voice.name} ({voice.lang})
-                          </option>
-                        ))}
-                        {availableVoices.length === 0 && (
-                          <option className="bg-zinc-950 text-white">Nenhuma voz encontrada</option>
-                        )}
-                      </select>
-                    </div>
-                    <div className="flex gap-2 items-end">
-                      <button
-                        id="test-tts-btn"
-                        onClick={handleTestTts}
-                        disabled={!ttsText}
-                        className={`w-full py-2 px-3 rounded-lg text-xs font-black uppercase italic flex items-center justify-center gap-1.5 transition-all ${
-                          isSpeakingTts
-                            ? 'bg-red-600 text-white hover:bg-red-700'
-                            : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-200 disabled:opacity-50'
-                        }`}
-                      >
-                        {isSpeakingTts ? <Pause className="w-3.5 h-3.5 fill-current" /> : <Volume2 className="w-3.5 h-3.5" />}
-                        {isSpeakingTts ? 'Parar Teste' : 'Testar Voz'}
-                      </button>
-                    </div>
+                  {/* Play Test trigger */}
+                  <div className="flex justify-end pt-0.5">
+                    <button
+                      id="test-tts-btn"
+                      type="button"
+                      onClick={handleTestTts}
+                      disabled={!ttsText}
+                      className={`py-2 px-4 rounded-lg text-xs font-black uppercase italic flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                        isSpeakingTts
+                          ? 'bg-red-600 text-white hover:bg-red-700 shadow-md animate-pulse'
+                          : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-200 disabled:opacity-50 border border-zinc-750'
+                      }`}
+                    >
+                      {isSpeakingTts ? <Pause className="w-3.5 h-3.5 fill-current" /> : <Volume2 className="w-3.5 h-3.5" />}
+                      {isSpeakingTts ? 'Parar Teste' : 'Testar Voz'}
+                    </button>
                   </div>
                 </div>
               )}
