@@ -10,6 +10,7 @@ import {
   Settings, CheckCircle2, ChevronRight, Speaker, Sparkles, Activity
 } from 'lucide-react';
 import { playAlertChime } from './utils/chime';
+import logoImage from './assets/images/i9_fit_logo_1782574590242.jpg';
 
 const DAYS_NAME = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
 
@@ -386,7 +387,7 @@ export default function App() {
       {/* Subtle Logo Watermark Background Overlay */}
       <div 
         className="fixed inset-0 bg-cover bg-center pointer-events-none opacity-[0.06] z-0" 
-        style={{ backgroundImage: `url('/src/assets/images/i9_fit_logo_1782574590242.jpg')` }}
+        style={{ backgroundImage: `url(${logoImage})` }}
       />
 
       {/* Header Bar */}
@@ -394,7 +395,7 @@ export default function App() {
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             <img 
-              src="/src/assets/images/i9_fit_logo_1782574590242.jpg" 
+              src={logoImage} 
               alt="I9 Fit Logo" 
               className="w-14 h-14 rounded-xl border border-neon/30 object-cover shadow-lg shadow-neon/10 shrink-0"
               referrerPolicy="no-referrer"
