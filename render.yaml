@@ -2,7 +2,7 @@ services:
   - type: web
     name: i9-fit-gym-voice
     env: static
-    buildCommand: npm run build
+    buildCommand: npm install && npm run build
     publishPath: dist
     routes:
       - type: rewrite
