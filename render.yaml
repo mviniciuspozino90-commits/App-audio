@@ -1,7 +1,6 @@
 services:
-  - type: web
+  - type: static
     name: i9-fit-gym-voice
-    env: static
     buildCommand: npm install --legacy-peer-deps && npm run build
     publishDir: dist
     envVars:
