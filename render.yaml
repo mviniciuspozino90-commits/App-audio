@@ -3,7 +3,7 @@ services:
     name: i9-fit-gym-voice
     env: static
     buildCommand: npm install --legacy-peer-deps && npm run build
-    publishPath: dist
+    publishDir: dist
     envVars:
       - key: ELECTRON_SKIP_BINARY_DOWNLOAD
         value: "1"
