@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useImperativeHandle, forwardRef, ChangeEvent } from 'react';
-import { Play, Pause, Volume2, VolumeX, Youtube, Music, Radio, SkipForward, AlertCircle, Globe, RefreshCw, Link, Compass, Info } from 'lucide-react';
+import { Play, Pause, Volume2, VolumeX, Youtube, Music, Radio, SkipForward, AlertCircle, Globe, RefreshCw, Link, Compass, Info, ArrowLeft, ArrowRight, Home, Search } from 'lucide-react';
 
 // Check if running inside Electron wrapper
 const isElectron = typeof window !== 'undefined' && 
@@ -26,74 +26,6 @@ interface LocalTrack {
   url: string;
 }
 
-interface MusicPreset {
-  id: string;
-  name: string;
-  type: 'stream' | 'iframe';
-  url: string;
-  genre: string;
-  icon: string;
-  description: string;
-}
-
-// Highly reliable presets for gym ambient music
-const MUSIC_PRESETS: MusicPreset[] = [
-  {
-    id: 'stream_workout',
-    name: 'I9 Fit Dance & Pop',
-    type: 'stream',
-    url: 'https://stream.zeno.fm/f37yv62220hvv',
-    genre: 'Dance / Eletrônica',
-    icon: '⚡',
-    description: 'Batidas super aceleradas e enérgicas, perfeitas para treino pesado de musculação.'
-  },
-  {
-    id: 'stream_sertanejo',
-    name: 'Sertanejo Universitário',
-    type: 'stream',
-    url: 'https://stream.zeno.fm/7q2f9p3p5g0uv',
-    genre: 'Sertanejo Hits',
-    icon: '🤠',
-    description: 'Os maiores sucessos do sertanejo atual para embalar a galera na academia.'
-  },
-  {
-    id: 'stream_rock',
-    name: 'Rock Workout',
-    type: 'stream',
-    url: 'https://stream.zeno.fm/08m7w47b40hvv',
-    genre: 'Hard Rock / Metal',
-    icon: '🎸',
-    description: 'Muito rock clássico e metal pesado para dar aquele gás extra no levantamento.'
-  },
-  {
-    id: 'stream_lofi',
-    name: 'Lofi Gym Focus',
-    type: 'stream',
-    url: 'https://stream.zeno.fm/2v1scdfp9g0uv',
-    genre: 'Lofi / Chillout',
-    icon: '🧘',
-    description: 'Músicas calmas, ideais para alongamentos, Pilates, Yoga ou relaxamento.'
-  },
-  {
-    id: 'iframe_yt_lofi',
-    name: 'YouTube: Gym Lofi 24/7',
-    type: 'iframe',
-    url: 'https://www.youtube.com/embed/jfKfPfyJRdk',
-    genre: 'Lofi Video Embed',
-    icon: '📺',
-    description: 'Transmissão contínua do YouTube com músicas lofi relaxantes.'
-  },
-  {
-    id: 'iframe_spotify_fitness',
-    name: 'Spotify: Top Hits',
-    type: 'iframe',
-    url: 'https://open.spotify.com/embed/playlist/37i9dQZF1DX76t638V6eg8',
-    genre: 'Hits de Academia',
-    icon: '🎵',
-    description: 'Playlist oficial do Spotify com as músicas mais tocadas nas academias.'
-  }
-];
-
 declare global {
   interface Window {
     onYouTubeIframeAPIReady?: () => void;
@@ -107,12 +39,66 @@ export const MusicPlayer = forwardRef<MusicPlayerControls, MusicPlayerProps>(({ 
   const [volume, setVolume] = useState(100); // 0 to 100
   const [prevVolume, setPrevVolume] = useState(100);
 
-  // Web Browser / Radio Player States
-  const [webUrl, setWebUrl] = useState('https://stream.zeno.fm/f37yv62220hvv'); // Defaults to our Fit Dance Stream
-  const [resolvedUrl, setResolvedUrl] = useState('https://stream.zeno.fm/f37yv62220hvv');
-  const [webMode, setWebMode] = useState<'stream' | 'youtube_api' | 'generic_iframe'>('stream');
-  const [activePresetId, setActivePresetId] = useState<string>('stream_workout');
+  // Web Browser States
+  const [webUrl, setWebUrl] = useState('i9://home'); // Defaults to our customized Web Browser Start Page
+  const [resolvedUrl, setResolvedUrl] = useState('i9://home');
+  const [webMode, setWebMode] = useState<'stream' | 'youtube_api' | 'generic_iframe'>('generic_iframe');
+  const [activePresetId, setActivePresetId] = useState<string>('');
   const [iframeKey, setIframeKey] = useState(0); // For reloading the iframe
+  const [isIframeSuspended, setIsIframeSuspended] = useState(false);
+
+  const webviewRef = useRef<any>(null);
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
+
+  // Ref callback to bind navigation state events in Electron's <webview>
+  const webviewCallbackRef = (node: any) => {
+    if (node) {
+      webviewRef.current = node;
+      
+      const handleNavigate = (e: any) => {
+        if (e.url) {
+          setWebUrl(e.url);
+          setResolvedUrl(e.url);
+        }
+      };
+      
+      // did-navigate covers normal link navigation
+      node.addEventListener('did-navigate', handleNavigate);
+      // did-navigate-in-page covers single page app (SPA) client-side routing like YouTube searches
+      node.addEventListener('did-navigate-in-page', handleNavigate);
+    }
+  };
+
+  // Back/Forward/Home/Reload Navigation Helpers
+  const handleGoBack = () => {
+    if (isElectron && webviewRef.current) {
+      try {
+        if (webviewRef.current.canGoBack()) {
+          webviewRef.current.goBack();
+        }
+      } catch (e) {
+        console.error('Webview back error:', e);
+      }
+    }
+  };
+
+  const handleGoForward = () => {
+    if (isElectron && webviewRef.current) {
+      try {
+        if (webviewRef.current.canGoForward()) {
+          webviewRef.current.goForward();
+        }
+      } catch (e) {
+        console.error('Webview forward error:', e);
+      }
+    }
+  };
+
+  const handleHome = () => {
+    const homeUrl = 'i9://home';
+    setWebUrl(homeUrl);
+    handleLoadWebUrl(homeUrl);
+  };
 
   // Helper states to check if input is a search term or a blocked site
   const [isInputSearch, setIsInputSearch] = useState(false);
@@ -131,6 +117,7 @@ export const MusicPlayer = forwardRef<MusicPlayerControls, MusicPlayerProps>(({ 
     const checkSearch = (input: string): boolean => {
       const val = input.trim();
       if (!val) return false;
+      if (val.startsWith('i9://')) return false;
       if (val.includes(' ') && !val.includes('.')) return true;
       if (!val.includes('.') && !val.startsWith('http') && val !== 'localhost') return true;
       return false;
@@ -146,6 +133,9 @@ export const MusicPlayer = forwardRef<MusicPlayerControls, MusicPlayerProps>(({ 
       const checkBlocked = (urlStr: string): boolean => {
         try {
           let clean = urlStr.trim();
+          if (clean.startsWith('i9://')) {
+            return false;
+          }
           if (!/^https?:\/\//i.test(clean)) {
             clean = 'https://' + clean;
           }
@@ -208,10 +198,14 @@ export const MusicPlayer = forwardRef<MusicPlayerControls, MusicPlayerProps>(({ 
   // Convert watch URLs of YouTube / Spotify to embed equivalents
   const resolveInputUrl = (input: string): { url: string; mode: 'stream' | 'youtube_api' | 'generic_iframe'; ytid?: string } => {
     let clean = input.trim();
-    if (!clean) return { url: '', mode: 'generic_iframe' };
+    if (!clean) return { url: 'i9://home', mode: 'generic_iframe' };
+
+    if (clean === 'i9://home' || clean === 'i9://' || clean === 'home') {
+      return { url: 'i9://home', mode: 'generic_iframe' };
+    }
 
     // Default to https if no protocol specified
-    if (!/^https?:\/\//i.test(clean)) {
+    if (!/^https?:\/\//i.test(clean) && !clean.startsWith('i9://')) {
       clean = 'https://' + clean;
     }
 
@@ -234,7 +228,7 @@ export const MusicPlayer = forwardRef<MusicPlayerControls, MusicPlayerProps>(({ 
         const playlistId = parsed.searchParams.get('list');
         if (playlistId) {
           return {
-            url: `https://www.youtube.com/embed/videoseries?list=${playlistId}&autoplay=1`,
+            url: `https://www.youtube.com/embed/videoseries?list=${playlistId}&autoplay=1&enablejsapi=1`,
             mode: 'generic_iframe'
           };
         }
@@ -479,6 +473,33 @@ export const MusicPlayer = forwardRef<MusicPlayerControls, MusicPlayerProps>(({ 
           } catch (e) {
             console.error(e);
           }
+        } else if (webMode === 'generic_iframe') {
+          if (isElectron && webviewRef.current) {
+            try {
+              webviewRef.current.setAudioMuted(true);
+              webviewRef.current.executeJavaScript('document.querySelectorAll("video, audio").forEach(el => el.pause())');
+            } catch (e) {
+              console.error('Webview pause error:', e);
+            }
+          } else {
+            // Check if it's YouTube, then we can use postMessage
+            if (resolvedUrl.includes('youtube.com') || resolvedUrl.includes('youtu.be')) {
+              if (iframeRef.current && iframeRef.current.contentWindow) {
+                try {
+                  iframeRef.current.contentWindow.postMessage(JSON.stringify({
+                    event: 'command',
+                    func: 'pauseVideo',
+                    args: []
+                  }), '*');
+                } catch (e) {
+                  console.error('Iframe postMessage pause error:', e);
+                }
+              }
+            } else if (resolvedUrl !== 'i9://home' && resolvedUrl !== 'about:blank') {
+              // Non-YouTube cross-origin iframe: suspend immediately to about:blank to force-silence any sound
+              setIsIframeSuspended(true);
+            }
+          }
         }
       } else if (activeTab === 'local' && localAudioRef.current) {
         localAudioRef.current.pause();
@@ -486,6 +507,8 @@ export const MusicPlayer = forwardRef<MusicPlayerControls, MusicPlayerProps>(({ 
     },
     play: () => {
       setIsPlayingState(true);
+      setIsIframeSuspended(false);
+
       if (activeTab === 'youtube') {
         if (webMode === 'stream' && localAudioRef.current) {
           localAudioRef.current.play().catch(e => console.log(e));
@@ -494,6 +517,29 @@ export const MusicPlayer = forwardRef<MusicPlayerControls, MusicPlayerProps>(({ 
             ytPlayerRef.current.playVideo();
           } catch (e) {
             console.error(e);
+          }
+        } else if (webMode === 'generic_iframe') {
+          if (isElectron && webviewRef.current) {
+            try {
+              webviewRef.current.setAudioMuted(false);
+              webviewRef.current.executeJavaScript('document.querySelectorAll("video, audio").forEach(el => el.play())');
+            } catch (e) {
+              console.error('Webview play error:', e);
+            }
+          } else {
+            if (resolvedUrl.includes('youtube.com') || resolvedUrl.includes('youtu.be')) {
+              if (iframeRef.current && iframeRef.current.contentWindow) {
+                try {
+                  iframeRef.current.contentWindow.postMessage(JSON.stringify({
+                    event: 'command',
+                    func: 'playVideo',
+                    args: []
+                  }), '*');
+                } catch (e) {
+                  console.error('Iframe postMessage play error:', e);
+                }
+              }
+            }
           }
         }
       } else if (activeTab === 'local' && localTracks.length > 0) {
@@ -516,6 +562,28 @@ export const MusicPlayer = forwardRef<MusicPlayerControls, MusicPlayerProps>(({ 
           } catch (e) {
             // ignore
           }
+        } else if (webMode === 'generic_iframe') {
+          if (isElectron && webviewRef.current) {
+            try {
+              webviewRef.current.executeJavaScript(`document.querySelectorAll("video, audio").forEach(el => el.volume = ${vol / 100})`);
+            } catch (e) {
+              console.error('Webview volume error:', e);
+            }
+          } else {
+            if (resolvedUrl.includes('youtube.com') || resolvedUrl.includes('youtu.be')) {
+              if (iframeRef.current && iframeRef.current.contentWindow) {
+                try {
+                  iframeRef.current.contentWindow.postMessage(JSON.stringify({
+                    event: 'command',
+                    func: 'setVolume',
+                    args: [vol]
+                  }), '*');
+                } catch (e) {
+                  console.error('Iframe postMessage volume error:', e);
+                }
+              }
+            }
+          }
         }
       } else if (activeTab === 'local' && localAudioRef.current) {
         localAudioRef.current.volume = vol / 100;
@@ -525,6 +593,9 @@ export const MusicPlayer = forwardRef<MusicPlayerControls, MusicPlayerProps>(({ 
       return currentVolumeRef.current;
     },
     isPlaying: () => {
+      if (activeTab === 'youtube' && webMode === 'generic_iframe' && resolvedUrl !== 'i9://home' && resolvedUrl !== 'about:blank' && !isIframeSuspended) {
+        return true;
+      }
       return isPlayingState;
     },
   };
@@ -563,12 +634,6 @@ export const MusicPlayer = forwardRef<MusicPlayerControls, MusicPlayerProps>(({ 
     }
   };
 
-  const handleSelectPreset = (preset: MusicPreset) => {
-    setActivePresetId(preset.id);
-    setWebUrl(preset.url);
-    handleLoadWebUrl(preset.url);
-  };
-
   return (
     <div id="music-player-container" className="bg-[#0c0c0c] border border-zinc-800 rounded-xl p-5 shadow-lg transition-all duration-300">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 border-b border-zinc-800 pb-3">
@@ -577,7 +642,7 @@ export const MusicPlayer = forwardRef<MusicPlayerControls, MusicPlayerProps>(({ 
           MÚSICA E TRILHA DE FUNDO
         </h2>
         
-        {/* Toggle between Web Browser/Radio and Local Files */}
+        {/* Toggle between Web Browser and Local Files */}
         <div className="flex bg-zinc-900 p-1 rounded-lg text-xs font-bold border border-zinc-800">
           <button
             id="tab-yt"
@@ -587,7 +652,7 @@ export const MusicPlayer = forwardRef<MusicPlayerControls, MusicPlayerProps>(({ 
             }`}
           >
             <Globe className="w-3.5 h-3.5" />
-            Navegador & Rádios
+            Navegador Web
           </button>
           <button
             id="tab-local"
@@ -605,70 +670,117 @@ export const MusicPlayer = forwardRef<MusicPlayerControls, MusicPlayerProps>(({ 
       {activeTab === 'youtube' ? (
         <div className="space-y-4">
           
-          {/* Quick Preset Grid */}
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-1">
-                <Compass className="w-3 h-3 text-neon" /> Rádios e Playlists Recomendadas
-              </label>
-              <span className="text-[9px] font-mono font-bold text-neon bg-neon/10 px-1.5 py-0.5 rounded uppercase">
-                Aprovadas p/ Academia
-              </span>
-            </div>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-              {MUSIC_PRESETS.map((preset) => {
-                const isActive = activePresetId === preset.id;
-                return (
-                  <button
-                    key={preset.id}
-                    type="button"
-                    onClick={() => handleSelectPreset(preset)}
-                    className={`p-2.5 rounded-xl border text-left transition-all flex items-start gap-2.5 cursor-pointer ${
-                      isActive
-                        ? 'bg-neon/10 border-neon text-white shadow-md'
-                        : 'bg-zinc-900/30 border-zinc-850 hover:border-zinc-700 text-zinc-400 hover:bg-zinc-900/70'
-                    }`}
-                  >
-                    <span className="text-xl shrink-0 p-1 bg-zinc-900 border border-zinc-800 rounded-lg">{preset.icon}</span>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center justify-between">
-                        <p className="text-[10px] font-black uppercase text-white truncate leading-tight">{preset.name}</p>
-                      </div>
-                      <p className="text-[8px] text-neon uppercase font-black font-mono tracking-wider mt-0.5 leading-none">{preset.genre}</p>
-                      <p className="text-[8px] text-zinc-500 line-clamp-1 mt-1 leading-normal">{preset.description}</p>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Browser Address Bar Input */}
-          <div className="flex gap-2">
-            <div className="relative flex-1">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <Link className="h-4 w-4 text-zinc-500" />
+          {/* Custom Web Browser Toolbar (Opera/Firefox-style) */}
+          <div className="flex flex-col gap-2 bg-zinc-900/40 p-3 rounded-xl border border-zinc-800 animate-fade-in">
+            <div className="flex items-center gap-2 flex-wrap md:flex-nowrap">
+              
+              {/* Navigation Controls */}
+              <div className="flex items-center gap-1 bg-zinc-950 p-1 rounded-lg border border-zinc-850 shrink-0">
+                <button
+                  onClick={handleGoBack}
+                  disabled={!isElectron}
+                  className={`p-1.5 rounded-md transition-all ${
+                    isElectron 
+                      ? 'text-zinc-300 hover:text-white hover:bg-zinc-800 cursor-pointer' 
+                      : 'text-zinc-600 cursor-not-allowed'
+                  }`}
+                  title={isElectron ? "Voltar Página" : "Voltar (Disponível apenas no App de Desktop)"}
+                >
+                  <ArrowLeft className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={handleGoForward}
+                  disabled={!isElectron}
+                  className={`p-1.5 rounded-md transition-all ${
+                    isElectron 
+                      ? 'text-zinc-300 hover:text-white hover:bg-zinc-800 cursor-pointer' 
+                      : 'text-zinc-600 cursor-not-allowed'
+                  }`}
+                  title={isElectron ? "Avançar Página" : "Avançar (Disponível apenas no App de Desktop)"}
+                >
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={() => {
+                    if (isElectron && webviewRef.current) {
+                      try {
+                        webviewRef.current.reload();
+                      } catch (e) {
+                        setIframeKey(prev => prev + 1);
+                      }
+                    } else {
+                      setIframeKey(prev => prev + 1);
+                    }
+                  }}
+                  className="p-1.5 rounded-md text-zinc-300 hover:text-white hover:bg-zinc-800 transition-all cursor-pointer"
+                  title="Recarregar"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={handleHome}
+                  className="p-1.5 rounded-md text-zinc-300 hover:text-white hover:bg-zinc-800 transition-all cursor-pointer"
+                  title="Página Inicial (YouTube)"
+                >
+                  <Home className="w-3.5 h-3.5" />
+                </button>
               </div>
-              <input
-                id="yt-url-input"
-                type="text"
-                placeholder="Cole o link do YouTube, Spotify, página ou Stream de Rádio..."
-                value={webUrl}
-                onChange={(e) => {
-                  setWebUrl(e.target.value);
-                  setActivePresetId(''); // Clear preset highligt since user custom typed
-                }}
-                className="w-full text-xs border border-zinc-800 rounded-xl pl-9 pr-3 py-2.5 bg-zinc-900 focus:outline-none focus:border-neon focus:ring-1 focus:ring-neon/30 transition-all text-white placeholder-zinc-500 font-bold"
-              />
+
+              {/* Address Input & SSL Indicator */}
+              <div className="relative flex-1 min-w-[200px]">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <Globe className="h-3.5 w-3.5 text-zinc-500" />
+                </div>
+                <input
+                  id="yt-url-input"
+                  type="text"
+                  placeholder="Pesquise no Google ou digite uma URL (ex: youtube.com)..."
+                  value={webUrl}
+                  onChange={(e) => setWebUrl(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      handleLoadWebUrl(webUrl);
+                    }
+                  }}
+                  className="w-full text-xs border border-zinc-800 rounded-xl pl-9 pr-20 py-2 bg-zinc-950 focus:outline-none focus:border-neon focus:ring-1 focus:ring-neon/30 transition-all text-white placeholder-zinc-500 font-medium"
+                />
+                
+                {/* SSL Secure Connection Badge */}
+                <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                  <span className="text-[8px] bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded font-mono font-bold tracking-wider">
+                    SECURE
+                  </span>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  id="load-yt-btn"
+                  onClick={() => handleLoadWebUrl(webUrl)}
+                  className="bg-neon hover:bg-neon-hover text-black px-3.5 py-2 rounded-xl text-xs font-black uppercase italic transition-all shadow-md flex items-center gap-1 cursor-pointer"
+                >
+                  <Search className="w-3.5 h-3.5" />
+                  IR
+                </button>
+                <button
+                  onClick={() => {
+                    window.open(resolvedUrl, '_blank');
+                  }}
+                  className="bg-zinc-850 hover:bg-zinc-800 text-zinc-300 border border-zinc-750 px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                  title="Abrir em Nova Aba"
+                >
+                  <Globe className="w-3.5 h-3.5" />
+                  ABRIR ABA
+                </button>
+              </div>
+
             </div>
-            <button
-              id="load-yt-btn"
-              onClick={() => handleLoadWebUrl(webUrl)}
-              className="bg-neon hover:bg-neon-hover text-black px-4 py-2.5 rounded-xl text-xs font-black uppercase italic transition-all shadow-md flex items-center gap-1.5 cursor-pointer shrink-0"
-            >
-              <Globe className="w-3.5 h-3.5" />
-              CONECTAR
-            </button>
+
+            <p className="text-[9px] text-zinc-500 px-1 flex items-center gap-1.5">
+              <Info className="w-3 h-3 text-neon" />
+              Você pode pesquisar diretamente digitando termos de busca ou colar qualquer link do YouTube, Spotify ou rádio!
+            </p>
           </div>
 
           {/* Active Player Display Area */}
@@ -797,6 +909,146 @@ export const MusicPlayer = forwardRef<MusicPlayerControls, MusicPlayerProps>(({ 
                       </a>
                     </div>
                   </div>
+                ) : (resolvedUrl === 'i9://home' && !isElectron) ? (
+                  <div className="w-full rounded-lg bg-zinc-950 border border-zinc-900 p-6 flex flex-col justify-between relative overflow-hidden min-h-[360px] md:min-h-[420px] max-h-[500px] overflow-y-auto scrollbar-thin">
+                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(0,255,102,0.03)_0%,transparent_70%)] pointer-events-none" />
+                    
+                    {/* Header Banner */}
+                    <div className="text-center md:text-left mb-6">
+                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-zinc-900 pb-4">
+                        <div>
+                          <h4 className="text-sm font-black uppercase text-white tracking-wider flex items-center gap-2 justify-center md:justify-start">
+                            <span className="text-neon animate-pulse">●</span> Portal i9 Web Connect
+                          </h4>
+                          <p className="text-[10px] text-zinc-500 mt-1 uppercase font-mono tracking-wider">
+                            Otimizado para som ambiente e playlists de alta performance na sua academia
+                          </p>
+                        </div>
+                        <span className="text-[9px] bg-neon/15 border border-neon/30 text-neon px-2.5 py-1 rounded font-bold uppercase tracking-wider self-center">
+                          Navegador Integrado
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Main Actions Row */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-6">
+                      
+                      {/* Left: How to Play Instructions */}
+                      <div className="bg-zinc-900/40 border border-zinc-850 p-4 rounded-xl flex flex-col justify-between">
+                        <div>
+                          <h5 className="text-[10px] font-black uppercase text-white tracking-wider flex items-center gap-1.5 mb-2.5">
+                            <Info className="w-3.5 h-3.5 text-neon" /> Como reproduzir músicas aqui:
+                          </h5>
+                          <ul className="space-y-2 text-[10px] text-zinc-400 font-medium">
+                            <li className="flex gap-2">
+                              <span className="text-neon font-black shrink-0">1.</span>
+                              <span>Abra o YouTube em uma nova aba para pesquisar a trilha sonora ou playlist ideal.</span>
+                            </li>
+                            <li className="flex gap-2">
+                              <span className="text-neon font-black shrink-0">2.</span>
+                              <span>Copie o link da barra de endereços (ex: <code className="text-zinc-300 font-mono">youtube.com/watch?v=...</code>).</span>
+                            </li>
+                            <li className="flex gap-2">
+                              <span className="text-neon font-black shrink-0">3.</span>
+                              <span>Cole o link na nossa barra acima e clique em <strong className="text-neon font-black uppercase italic">IR</strong>.</span>
+                            </li>
+                            <li className="flex gap-2">
+                              <span className="text-neon font-black shrink-0">4.</span>
+                              <span>Pronto! O reprodutor inteligente tocará a música continuamente sem interrupções!</span>
+                            </li>
+                          </ul>
+                        </div>
+                        <div className="mt-4 pt-3 border-t border-zinc-850 text-[9px] text-zinc-500 flex items-center gap-1.5">
+                          <span>💡 Suporta links de vídeos individuais, transmissões ao vivo e playlists completas!</span>
+                        </div>
+                      </div>
+
+                      {/* Right: Quick Access External Hub */}
+                      <div className="bg-zinc-900/40 border border-zinc-850 p-4 rounded-xl flex flex-col justify-between">
+                        <div>
+                          <h5 className="text-[10px] font-black uppercase text-white tracking-wider flex items-center gap-1.5 mb-3">
+                            <Compass className="w-3.5 h-3.5 text-neon" /> Atalhos Rápidos (Nova Aba):
+                          </h5>
+                          <div className="grid grid-cols-2 gap-2">
+                            <a
+                              href="https://www.youtube.com"
+                              target="_blank"
+                              rel="noreferrer"
+                              className="p-2.5 rounded-lg bg-red-600/10 border border-red-600/20 hover:border-red-500/50 hover:bg-red-600/20 text-white transition-all text-center flex flex-col items-center gap-1 group"
+                            >
+                              <Youtube className="w-5 h-5 text-red-500 group-hover:scale-110 transition-transform" />
+                              <span className="text-[9px] font-black uppercase tracking-wider">Abrir YouTube</span>
+                            </a>
+                            <a
+                              href="https://open.spotify.com"
+                              target="_blank"
+                              rel="noreferrer"
+                              className="p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 hover:border-emerald-500/50 hover:bg-emerald-500/20 text-white transition-all text-center flex flex-col items-center gap-1 group"
+                            >
+                              <Music className="w-5 h-5 text-emerald-500 group-hover:scale-110 transition-transform" />
+                              <span className="text-[9px] font-black uppercase tracking-wider">Abrir Spotify</span>
+                            </a>
+                          </div>
+                        </div>
+                        <p className="text-[8px] text-zinc-500 mt-3 leading-normal">
+                          * Sites como YouTube e Spotify bloqueiam a exibição da página inicial dentro de outros aplicativos web por questões de segurança (X-Frame-Options). Porém, ao colar links diretos de músicas ou vídeos acima, o i9 Fit contorna o bloqueio e carrega o tocador perfeitamente!
+                        </p>
+                      </div>
+
+                    </div>
+
+                    {/* Bottom: Speed Dial of Gym Playlists */}
+                    <div className="border-t border-zinc-900 pt-4">
+                      <h5 className="text-[10px] font-black uppercase text-zinc-400 tracking-wider mb-2.5 flex items-center gap-1">
+                        ⚡ Playlists de Treino Direto no App (Sem Bloqueios!)
+                      </h5>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setWebUrl('https://www.youtube.com/watch?v=jfKfPfyJRdk');
+                            handleLoadWebUrl('https://www.youtube.com/watch?v=jfKfPfyJRdk');
+                          }}
+                          className="p-2 bg-zinc-900 border border-zinc-850 hover:border-neon rounded-lg text-left transition-all cursor-pointer flex items-center gap-2 group"
+                        >
+                          <span className="text-base">🧘</span>
+                          <div className="min-w-0">
+                            <p className="text-[9px] font-bold text-white uppercase group-hover:text-neon transition-colors">Gym Lofi Relax</p>
+                            <p className="text-[8px] text-zinc-500">Foco & Alongamentos</p>
+                          </div>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setWebUrl('https://www.youtube.com/watch?v=n93D-I0SAb4');
+                            handleLoadWebUrl('https://www.youtube.com/watch?v=n93D-I0SAb4');
+                          }}
+                          className="p-2 bg-zinc-900 border border-zinc-850 hover:border-neon rounded-lg text-left transition-all cursor-pointer flex items-center gap-2 group"
+                        >
+                          <span className="text-base">☠️</span>
+                          <div className="min-w-0">
+                            <p className="text-[9px] font-bold text-white uppercase group-hover:text-neon transition-colors">Gym Phonk Workout</p>
+                            <p className="text-[8px] text-zinc-500">Foco Extremo & Pesos</p>
+                          </div>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setWebUrl('https://www.youtube.com/watch?v=4xDzrJKXOOY');
+                            handleLoadWebUrl('https://www.youtube.com/watch?v=4xDzrJKXOOY');
+                          }}
+                          className="p-2 bg-zinc-900 border border-zinc-850 hover:border-neon rounded-lg text-left transition-all cursor-pointer flex items-center gap-2 group"
+                        >
+                          <span className="text-base">👾</span>
+                          <div className="min-w-0">
+                            <p className="text-[9px] font-bold text-white uppercase group-hover:text-neon transition-colors">Synthwave Gym</p>
+                            <p className="text-[8px] text-zinc-500">Energia Eletrônica Retro</p>
+                          </div>
+                        </button>
+                      </div>
+                    </div>
+
+                  </div>
                 ) : (isBlockedUrl && !isElectron) ? (
                   <div className="aspect-video w-full rounded-lg bg-zinc-950 border border-zinc-900 flex flex-col items-center justify-center text-center p-6 relative overflow-hidden">
                     <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(239,68,68,0.03)_0%,transparent_70%)] pointer-events-none" />
@@ -819,13 +1071,13 @@ export const MusicPlayer = forwardRef<MusicPlayerControls, MusicPlayerProps>(({ 
                       </button>
                       <button
                         onClick={() => {
-                          const defaultPreset = MUSIC_PRESETS[0];
-                          handleSelectPreset(defaultPreset);
+                          setWebUrl('i9://home');
+                          handleLoadWebUrl('i9://home');
                         }}
                         className="px-3.5 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700 rounded-lg text-[9px] font-black uppercase tracking-wider flex items-center gap-1.5 cursor-pointer transition-all"
                       >
-                        <RefreshCw className="w-3.5 h-3.5" />
-                        Voltar para Rádio i9 Fit
+                        <Home className="w-3.5 h-3.5 text-zinc-400" />
+                        Ir para Página Inicial
                       </button>
                     </div>
                   </div>
@@ -833,6 +1085,7 @@ export const MusicPlayer = forwardRef<MusicPlayerControls, MusicPlayerProps>(({ 
                   <div className="aspect-video w-full rounded-lg bg-black overflow-hidden border border-zinc-900 shadow-inner relative flex items-center justify-center">
                     {isElectron ? (
                       <Webview
+                        ref={webviewCallbackRef}
                         key={iframeKey}
                         src={resolvedUrl}
                         className="w-full h-full absolute inset-0 bg-zinc-950 border-none"
@@ -842,8 +1095,9 @@ export const MusicPlayer = forwardRef<MusicPlayerControls, MusicPlayerProps>(({ 
                       />
                     ) : (
                       <iframe
+                        ref={iframeRef}
                         key={iframeKey}
-                        src={resolvedUrl}
+                        src={isIframeSuspended ? 'about:blank' : resolvedUrl}
                         className="w-full h-full absolute inset-0 bg-zinc-950 border-none"
                         allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
                         sandbox="allow-same-origin allow-scripts allow-forms allow-popups"

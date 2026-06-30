@@ -1,13 +1,14 @@
 import { useState, useRef } from 'react';
 import { Schedule, AnnouncementAudio } from '../types';
-import { Calendar, Plus, Trash2, Play, Check, Clock, AlertTriangle, ToggleLeft, ToggleRight, Sparkles } from 'lucide-react';
+import { Calendar, Plus, Trash2, Play, Check, Clock, AlertTriangle, ToggleLeft, ToggleRight, Sparkles, Bell } from 'lucide-react';
 import { saveSchedule, deleteScheduleFromDB } from '../utils/db';
+import { playAlertChime } from '../utils/chime';
 
 interface ScheduleManagerProps {
   schedules: Schedule[];
   audios: AnnouncementAudio[];
   onSchedulesUpdated: () => void;
-  onManualTrigger: (audioId: string, title: string) => void;
+  onManualTrigger: (audioId: string, title: string, playChime?: boolean) => void;
 }
 
 const DAYS_OF_WEEK = [
@@ -33,6 +34,7 @@ export function ScheduleManager({ schedules, audios, onSchedulesUpdated, onManua
   const [selectedDays, setSelectedDays] = useState<number[]>([1, 2, 3, 4, 5]); // Default Mon-Fri
   const [fadeOutTime, setFadeOutTime] = useState(2); // default 2 seconds fade
   const [intervalMinutes, setIntervalMinutes] = useState<number>(0); // 0 = play once
+  const [playChime, setPlayChime] = useState(true); // default true for warning chime
 
   const toggleDay = (dayValue: number) => {
     setSelectedDays(prev =>
@@ -76,6 +78,7 @@ export function ScheduleManager({ schedules, audios, onSchedulesUpdated, onManua
       enabled: true,
       fadeOutTime,
       interval: intervalMinutes > 0 ? intervalMinutes : undefined,
+      playChime,
     };
 
     try {
@@ -88,6 +91,7 @@ export function ScheduleManager({ schedules, audios, onSchedulesUpdated, onManua
       setSelectedDays([1, 2, 3, 4, 5]);
       setFadeOutTime(2);
       setIntervalMinutes(0);
+      setPlayChime(true);
 
       onSchedulesUpdated();
     } catch (e) {
@@ -282,6 +286,40 @@ export function ScheduleManager({ schedules, audios, onSchedulesUpdated, onManua
             </div>
           </div>
 
+          {/* Warning Chime Option */}
+          <div className="bg-zinc-950/60 p-3.5 rounded-xl border border-zinc-850 flex items-center justify-between gap-3">
+            <div className="flex items-start gap-2.5">
+              <Bell className="w-4 h-4 text-neon shrink-0 mt-0.5 animate-pulse" />
+              <div>
+                <p className="text-xs font-bold text-white uppercase tracking-wide">Emitir Sinal de Atenção (Chime)</p>
+                <p className="text-[10px] text-zinc-500 leading-normal">
+                  Reproduz um elegante e discreto "ding-dong" sonoro antes de iniciar a reprodução do anúncio.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => playAlertChime()}
+                className="px-2.5 py-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-[10px] font-black uppercase text-neon rounded-lg cursor-pointer transition-all shrink-0"
+              >
+                Testar Sinal
+              </button>
+              <button
+                id="toggle-chime-form"
+                type="button"
+                onClick={() => setPlayChime(!playChime)}
+                className="p-1 rounded-lg hover:bg-zinc-900 transition-all cursor-pointer"
+              >
+                {playChime ? (
+                  <ToggleRight className="w-7 h-7 text-neon" />
+                ) : (
+                  <ToggleLeft className="w-7 h-7 text-zinc-700" />
+                )}
+              </button>
+            </div>
+          </div>
+
           {error && (
             <div className="p-3 bg-red-900/30 border border-red-500/50 rounded-lg text-xs text-red-400 font-bold">
               {error}
@@ -329,6 +367,12 @@ export function ScheduleManager({ schedules, audios, onSchedulesUpdated, onManua
                       <h4 className="text-sm font-bold text-zinc-100 leading-tight">
                         {schedule.title}
                       </h4>
+                      {schedule.playChime !== false && (
+                        <span className="bg-neon/15 border border-neon/35 text-neon text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-lg flex items-center gap-1 animate-pulse" title="Sinal Sonoro de Alerta Ativo">
+                          <Bell className="w-2.5 h-2.5" />
+                          Bip Ativo
+                        </span>
+                      )}
                       {!hasAudio && (
                         <span className="bg-red-500/20 text-red-400 text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded flex items-center gap-0.5" title="Áudio não encontrado">
                           <AlertTriangle className="w-2.5 h-2.5" />
@@ -373,7 +417,7 @@ export function ScheduleManager({ schedules, audios, onSchedulesUpdated, onManua
                   {/* Play Now Button */}
                   <button
                     id={`trigger-manual-${schedule.id}`}
-                    onClick={() => onManualTrigger(schedule.audioId, schedule.title)}
+                    onClick={() => onManualTrigger(schedule.audioId, schedule.title, schedule.playChime !== false)}
                     disabled={!hasAudio}
                     title="Disparar este anúncio manualmente agora"
                     className="p-2 hover:bg-neon/10 border border-transparent hover:border-neon/20 text-neon rounded-lg transition-all disabled:opacity-30 disabled:cursor-not-allowed"

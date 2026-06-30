@@ -16,6 +16,7 @@ export interface Schedule {
   enabled: boolean;
   fadeOutTime: number; // in seconds (for smooth music fading)
   interval?: number; // repetition interval in minutes (e.g. 20, 30, 40, 60)
+  playChime?: boolean; // play brief alert sound before announcement starts
 }
 
 export interface PlayLog {

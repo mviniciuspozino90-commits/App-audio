@@ -9,6 +9,7 @@ import {
   Clock, Info, VolumeX, Volume2, ShieldCheck, Play, HelpCircle, 
   Settings, CheckCircle2, ChevronRight, Speaker, Sparkles, Activity
 } from 'lucide-react';
+import { playAlertChime } from './utils/chime';
 
 const DAYS_NAME = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
 
@@ -184,7 +185,7 @@ export default function App() {
             lastTriggeredRef.current[schedule.id] = triggerKey;
             
             // Trigger!
-            triggerAnnouncement(schedule.audioId, schedule.title, schedule.fadeOutTime);
+            triggerAnnouncement(schedule.audioId, schedule.title, schedule.fadeOutTime, schedule.playChime !== false);
           }
         }
       }
@@ -192,7 +193,7 @@ export default function App() {
   };
 
   // Central Playing Sequence
-  const triggerAnnouncement = async (audioId: string, scheduleTitle: string, fadeOutSec: number = 2) => {
+  const triggerAnnouncement = async (audioId: string, scheduleTitle: string, fadeOutSec: number = 2, playChime: boolean = false) => {
     const audio = audios.find((a) => a.id === audioId);
     if (!audio) {
       // Audio deleted or missing
@@ -222,6 +223,11 @@ export default function App() {
     // Phase 1: Duck or Pause background music
     if (isMusicPlayingBefore && musicPlayerRef.current) {
       await fadeMusicVolume(originalVolume, 0, fadeOutSec * 1000);
+    }
+
+    // Phase 1.5: Play warning chime if enabled
+    if (playChime) {
+      await playAlertChime();
     }
 
     // Phase 2: Play the selected audio
@@ -367,8 +373,8 @@ export default function App() {
   };
 
   // For manual triggers
-  const handleManualTrigger = (audioId: string, title: string) => {
-    triggerAnnouncement(audioId, `Disparo Manual: ${title}`, 1.5);
+  const handleManualTrigger = (audioId: string, title: string, playChime: boolean = true) => {
+    triggerAnnouncement(audioId, `Disparo Manual: ${title}`, 1.5, playChime);
   };
 
   const formattedTime = currentDateTime.toLocaleTimeString('pt-BR');
