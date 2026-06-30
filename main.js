@@ -1,4 +1,4 @@
-import { app, BrowserWindow, shell } from 'electron';
+import { app, BrowserWindow, shell, session } from 'electron';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -18,11 +18,15 @@ function createWindow() {
       contextIsolation: true,
       webviewTag: true,
       sandbox: true,
+      autoplayPolicy: 'no-user-gesture-required',
     },
     title: "I9 Fit Gym Voice",
     autoHideMenuBar: true,
     icon: path.join(__dirname, 'dist/favicon.ico'),
   });
+
+  // Set a clean Chrome User-Agent on main window webContents
+  mainWindow.webContents.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36");
 
   // Load the built HTML file from Vite compilation
   mainWindow.loadFile(path.join(__dirname, 'dist/index.html')).catch((err) => {
@@ -49,11 +53,15 @@ app.on('web-contents-created', (event, contents) => {
     webPreferences.nodeIntegration = false;
     webPreferences.contextIsolation = true;
     webPreferences.sandbox = true;
+    webPreferences.autoplayPolicy = 'no-user-gesture-required';
   });
 
   // Intercept target="_blank" and popups inside the webview (e.g., YouTube ads)
   // and open them in the user's default system browser instead of creating empty desktop windows
   contents.on('did-attach-webview', (event, webviewWebContents) => {
+    // Set a standard Google Chrome user agent to prevent YouTube and Spotify from blocking embeds with "Error 153"
+    webviewWebContents.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36");
+
     webviewWebContents.setWindowOpenHandler(({ url }) => {
       if (url.startsWith('http:') || url.startsWith('https:')) {
         shell.openExternal(url);
@@ -64,6 +72,12 @@ app.on('web-contents-created', (event, contents) => {
 });
 
 app.whenReady().then(() => {
+  // Override User-Agent globally for all sessions to prevent YouTube and Spotify embedding/playback restrictions (Error 153)
+  session.defaultSession.webRequest.onBeforeSendHeaders((details, callback) => {
+    details.requestHeaders['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
+    callback({ cancel: false, requestHeaders: details.requestHeaders });
+  });
+
   createWindow();
 
   app.on('activate', () => {

@@ -2,8 +2,13 @@ services:
   - type: web
     name: i9-fit-gym-voice
     env: static
-    buildCommand: npm install && npm run build
+    buildCommand: npm install --legacy-peer-deps && npm run build
     publishPath: dist
+    envVars:
+      - key: ELECTRON_SKIP_BINARY_DOWNLOAD
+        value: "1"
+      - key: NODE_VERSION
+        value: "20"
     routes:
       - type: rewrite
         source: /*

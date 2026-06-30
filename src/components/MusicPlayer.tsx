@@ -1092,6 +1092,8 @@ export const MusicPlayer = forwardRef<MusicPlayerControls, MusicPlayerProps>(({ 
                         style={{ width: '100%', height: '100%', border: 'none' }}
                         allowpopups="true"
                         title="i9 Web Browser View"
+                        useragent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+                        httpreferrer="https://www.youtube.com/"
                       />
                     ) : (
                       <iframe
