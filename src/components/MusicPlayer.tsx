@@ -45,6 +45,7 @@ export const MusicPlayer = forwardRef<MusicPlayerControls, MusicPlayerProps>(({ 
   const [spotifyCurrentTrack, setSpotifyCurrentTrack] = useState<any>(null);
   const [spotifyError, setSpotifyError] = useState<string | null>(null);
   const [spotifyAuthLoading, setSpotifyAuthLoading] = useState(false);
+  const [spotifyClientId, setSpotifyClientId] = useState<string>(import.meta.env.VITE_SPOTIFY_CLIENT_ID || localStorage.getItem('spotify_client_id') || '');
   const spotifyPlayerInstanceRef = useRef<any>(null);
 
   // Web Browser States
@@ -359,9 +360,8 @@ export const MusicPlayer = forwardRef<MusicPlayerControls, MusicPlayerProps>(({ 
 
   // Spotify Auth Redirect & Message Handlers
   const handleSpotifyConnect = () => {
-    const clientId = import.meta.env.VITE_SPOTIFY_CLIENT_ID || '';
-    if (!clientId) {
-      setSpotifyError('VITE_SPOTIFY_CLIENT_ID não configurado. Por favor, adicione o Client ID do Spotify nas variáveis de ambiente (.env).');
+    if (!spotifyClientId) {
+      setSpotifyError('Client ID do Spotify não configurado. Por favor, adicione-o no campo abaixo.');
       return;
     }
 
@@ -377,7 +377,7 @@ export const MusicPlayer = forwardRef<MusicPlayerControls, MusicPlayerProps>(({ 
       'user-read-private'
     ].join(' ');
 
-    const authUrl = `https://accounts.spotify.com/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=token&scope=${encodeURIComponent(scopes)}&show_dialog=true`;
+    const authUrl = `https://accounts.spotify.com/authorize?client_id=${spotifyClientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=token&scope=${encodeURIComponent(scopes)}&show_dialog=true`;
 
     const width = 500;
     const height = 650;
@@ -412,6 +412,12 @@ export const MusicPlayer = forwardRef<MusicPlayerControls, MusicPlayerProps>(({ 
     setSpotifyCurrentTrack(null);
     setSpotifyError(null);
     localStorage.removeItem('spotify_access_token');
+  };
+
+  const handleResetClientId = () => {
+    handleSpotifyDisconnect();
+    setSpotifyClientId('');
+    localStorage.removeItem('spotify_client_id');
   };
 
   useEffect(() => {
@@ -1557,20 +1563,74 @@ export const MusicPlayer = forwardRef<MusicPlayerControls, MusicPlayerProps>(({ 
                 </div>
               )}
 
-              <button
-                onClick={handleSpotifyConnect}
-                disabled={spotifyAuthLoading}
-                className="mx-auto px-5 py-2.5 bg-[#1DB954] text-black hover:bg-[#1ed760] disabled:bg-zinc-700 disabled:text-zinc-500 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-2 cursor-pointer transition-all shadow-md shadow-[#1DB954]/10"
-              >
-                {spotifyAuthLoading ? (
-                  <span>Conectando...</span>
-                ) : (
-                  <>
-                    <Globe className="w-4 h-4 fill-current" />
-                    CONECTAR SPOTIFY
-                  </>
-                )}
-              </button>
+              {!spotifyClientId ? (
+                <div className="space-y-3 max-w-xs mx-auto bg-zinc-950 p-4 rounded-xl border border-zinc-900 text-left">
+                  <h4 className="text-[10px] font-black uppercase text-[#1DB954] tracking-wider">Configurar Client ID</h4>
+                  <p className="text-[9px] text-zinc-400 leading-normal">
+                    Como você está usando o app no Render ou não configurou as variáveis de ambiente, cole o seu <strong>Spotify Client ID</strong> abaixo para ativar a conexão:
+                  </p>
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      const form = e.currentTarget;
+                      const input = form.elements.namedItem('clientIdInput') as HTMLInputElement;
+                      if (input && input.value.trim()) {
+                        const val = input.value.trim();
+                        setSpotifyClientId(val);
+                        localStorage.setItem('spotify_client_id', val);
+                        setSpotifyError(null);
+                      }
+                    }}
+                    className="space-y-2"
+                  >
+                    <input
+                      name="clientIdInput"
+                      type="text"
+                      placeholder="Cole seu Client ID aqui..."
+                      className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-[11px] text-zinc-200 focus:outline-hidden focus:border-[#1DB954] transition-all font-mono"
+                      required
+                    />
+                    <button
+                      type="submit"
+                      className="w-full py-1.5 bg-[#1DB954] hover:bg-[#1ed760] text-black font-black uppercase text-[9px] rounded-lg cursor-pointer transition-all tracking-wider"
+                    >
+                      Salvar e Prosseguir
+                    </button>
+                  </form>
+                  <div className="text-[8px] text-zinc-500 leading-normal mt-1">
+                    Crie um aplicativo no <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noreferrer" className="text-[#1DB954] underline hover:text-[#1ed760] transition-colors">Spotify Developer Dashboard</a> com o URI de redirecionamento:
+                    <div className="bg-zinc-900 p-1.5 rounded mt-1 font-mono text-[8px] break-all select-all text-zinc-300">
+                      {window.location.origin}/spotify-callback.html
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <button
+                    onClick={handleSpotifyConnect}
+                    disabled={spotifyAuthLoading}
+                    className="mx-auto px-5 py-2.5 bg-[#1DB954] text-black hover:bg-[#1ed760] disabled:bg-zinc-700 disabled:text-zinc-500 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-2 cursor-pointer transition-all shadow-md shadow-[#1DB954]/10"
+                  >
+                    {spotifyAuthLoading ? (
+                      <span>Conectando...</span>
+                    ) : (
+                      <>
+                        <Globe className="w-4 h-4 fill-current" />
+                        CONECTAR SPOTIFY
+                      </>
+                    )}
+                  </button>
+
+                  <div className="flex justify-center">
+                    <button
+                      onClick={handleResetClientId}
+                      className="text-[9px] text-zinc-500 hover:text-zinc-350 hover:underline cursor-pointer transition-colors"
+                    >
+                      Alterar Client ID do Spotify
+                    </button>
+                  </div>
+                </div>
+              )}
               
               <div className="text-[9px] text-zinc-500 max-w-xs mx-auto">
                 Nota: O Spotify exige uma conta <strong>Premium</strong> para reprodução direta pelo SDK na Web.
@@ -1579,19 +1639,27 @@ export const MusicPlayer = forwardRef<MusicPlayerControls, MusicPlayerProps>(({ 
           ) : (
             <div className="space-y-4">
               {/* Spotify Player Status Bar */}
-              <div className="flex items-center justify-between bg-zinc-950 p-3 rounded-xl border border-zinc-900 text-xs">
+              <div className="flex items-center justify-between bg-zinc-950 p-3 rounded-xl border border-zinc-900 text-xs gap-2 flex-wrap sm:flex-nowrap">
                 <div className="flex items-center gap-2">
                   <div className={`w-2.5 h-2.5 rounded-full ${spotifyDeviceId ? 'bg-[#1DB954] animate-pulse' : 'bg-amber-500'}`} />
                   <span className="font-bold text-zinc-300">
                     {spotifyDeviceId ? 'i9 Fit Gym Web Player (Pronto)' : 'Conectando dispositivo...'}
                   </span>
                 </div>
-                <button
-                  onClick={handleSpotifyDisconnect}
-                  className="text-[10px] uppercase font-bold text-zinc-500 hover:text-red-400 transition-all cursor-pointer"
-                >
-                  Desconectar
-                </button>
+                <div className="flex gap-3 shrink-0">
+                  <button
+                    onClick={handleResetClientId}
+                    className="text-[10px] uppercase font-bold text-zinc-500 hover:text-zinc-300 transition-all cursor-pointer"
+                  >
+                    Alterar ID
+                  </button>
+                  <button
+                    onClick={handleSpotifyDisconnect}
+                    className="text-[10px] uppercase font-bold text-zinc-500 hover:text-red-400 transition-all cursor-pointer"
+                  >
+                    Desconectar
+                  </button>
+                </div>
               </div>
 
               {spotifyError && (
