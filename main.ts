@@ -1,11 +1,7 @@
 import { app, BrowserWindow, shell, session } from 'electron';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import * as path from 'path';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-let mainWindow;
+let mainWindow: BrowserWindow | null = null;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -19,6 +15,7 @@ function createWindow() {
       webviewTag: true,
       sandbox: true,
       autoplayPolicy: 'no-user-gesture-required',
+      preload: path.join(__dirname, 'preload.cjs'),
     },
     title: "I9 Fit Gym Voice",
     autoHideMenuBar: true,
@@ -54,6 +51,7 @@ app.on('web-contents-created', (event, contents) => {
     webPreferences.contextIsolation = true;
     webPreferences.sandbox = true;
     webPreferences.autoplayPolicy = 'no-user-gesture-required';
+    // Do NOT inject preload script on third-party guest webviews to prevent security blocks or crashes
   });
 
   // Intercept target="_blank" and popups inside the webview (e.g., YouTube ads)
@@ -72,10 +70,57 @@ app.on('web-contents-created', (event, contents) => {
 });
 
 app.whenReady().then(() => {
-  // Override User-Agent globally for all sessions to prevent YouTube and Spotify embedding/playback restrictions (Error 153)
+  // Override User-Agent, Referer, and Origin globally for all sessions to prevent YouTube and Spotify embedding/playback restrictions (Error 153)
   session.defaultSession.webRequest.onBeforeSendHeaders((details, callback) => {
-    details.requestHeaders['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
-    callback({ cancel: false, requestHeaders: details.requestHeaders });
+    const headers = details.requestHeaders;
+    const url = details.url.toLowerCase();
+
+    // Clean up existing case-insensitive user-agent header
+    for (const key of Object.keys(headers)) {
+      if (key.toLowerCase() === 'user-agent') {
+        delete headers[key];
+      }
+    }
+
+    // Set standard Google Chrome User-Agent
+    headers['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
+
+    // Spoof Referer and Origin headers for YouTube main domains to bypass player embedding blocks, but do NOT touch googlevideo.com or ytimg.com as that breaks stream signature validation (Error 152-4)
+    if ((url.includes('youtube.com') || url.includes('youtube-nocookie.com')) && !url.includes('googlevideo.com') && !url.includes('ytimg.com')) {
+      for (const key of Object.keys(headers)) {
+        const lowerKey = key.toLowerCase();
+        if (lowerKey === 'referer' || lowerKey === 'origin') {
+          delete headers[key];
+        }
+      }
+      headers['Referer'] = 'https://www.youtube.com/';
+      headers['Origin'] = 'https://www.youtube.com';
+    } else if (url.includes('spotify.com')) {
+      for (const key of Object.keys(headers)) {
+        const lowerKey = key.toLowerCase();
+        if (lowerKey === 'referer' || lowerKey === 'origin') {
+          delete headers[key];
+        }
+      }
+      headers['Referer'] = 'https://open.spotify.com/';
+      headers['Origin'] = 'https://open.spotify.com';
+    }
+
+    callback({ cancel: false, requestHeaders: headers });
+  });
+
+  // Intercept and strip restrictive security headers (X-Frame-Options and CSP) from response to allow embedding anything
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    const responseHeaders = details.responseHeaders || {};
+
+    for (const key of Object.keys(responseHeaders)) {
+      const lowerKey = key.toLowerCase();
+      if (lowerKey === 'x-frame-options' || lowerKey === 'content-security-policy') {
+        delete responseHeaders[key];
+      }
+    }
+
+    callback({ cancel: false, responseHeaders });
   });
 
   createWindow();

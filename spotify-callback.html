@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>i9 Fit - Spotify Conectado</title>
+  <style>
+    body {
+      background-color: #09090b;
+      color: #ffffff;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      margin: 0;
+      text-align: center;
+    }
+    .spinner {
+      border: 3px solid rgba(255,255,255,0.1);
+      border-radius: 50%;
+      border-top: 3px solid #1DB954;
+      width: 40px;
+      height: 40px;
+      animation: spin 1s linear infinite;
+      margin-bottom: 20px;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    h1 {
+      font-size: 18px;
+      font-weight: bold;
+      margin: 0 0 10px 0;
+    }
+    p {
+      font-size: 13px;
+      color: #a1a1aa;
+      margin: 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="spinner"></div>
+  <h1>Conectando ao Spotify...</h1>
+  <p>Esta janela fechará automaticamente.</p>
+
+  <script>
+    // Extract access token from the hash fragment
+    const hash = window.location.hash.substring(1);
+    const params = new URLSearchParams(hash);
+    const accessToken = params.get('access_token');
+    const error = params.get('error');
+
+    if (window.opener) {
+      if (accessToken) {
+        window.opener.postMessage({
+          type: 'SPOTIFY_AUTH_SUCCESS',
+          token: accessToken
+        }, window.location.origin);
+      } else if (error) {
+        window.opener.postMessage({
+          type: 'SPOTIFY_AUTH_ERROR',
+          error: error
+        }, window.location.origin);
+      } else {
+        // Check query params if hash failed
+        const queryParams = new URLSearchParams(window.location.search);
+        const codeToken = queryParams.get('access_token') || queryParams.get('token');
+        const queryError = queryParams.get('error');
+        if (codeToken) {
+          window.opener.postMessage({
+            type: 'SPOTIFY_AUTH_SUCCESS',
+            token: codeToken
+          }, window.location.origin);
+        } else if (queryError) {
+          window.opener.postMessage({
+            type: 'SPOTIFY_AUTH_ERROR',
+            error: queryError
+          }, window.location.origin);
+        } else {
+          window.opener.postMessage({
+            type: 'SPOTIFY_AUTH_ERROR',
+            error: 'Nenhum token encontrado'
+          }, window.location.origin);
+        }
+      }
+      setTimeout(() => {
+        window.close();
+      }, 500);
+    } else {
+      document.querySelector('h1').textContent = 'Conectado!';
+      document.querySelector('p').textContent = 'Você já pode fechar esta janela.';
+    }
+  </script>
+</body>
+</html>

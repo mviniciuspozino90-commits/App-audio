@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "main": "main.js",
+  "main": "main.cjs",
   "scripts": {
     "start": "node server.js",
     "dev": "vite --port=3000 --host=0.0.0.0",
@@ -14,8 +14,9 @@
     "cap:init": "npx cap add android",
     "cap:sync": "npm run build && npx cap sync",
     "cap:open": "npx cap open android",
-    "electron:start": "npm run build && electron .",
-    "electron:build": "npm run build && electron-builder --win"
+    "electron:start": "npm run build && npm run electron:compile && electron .",
+    "electron:build": "npm run build && npm run electron:compile && electron-builder --win",
+    "electron:compile": "esbuild main.ts --bundle --platform=node --format=cjs --outfile=main.cjs --external:electron && esbuild preload.ts --bundle --platform=node --format=cjs --outfile=preload.cjs --external:electron"
   },
   "build": {
     "appId": "com.i9fit.gymvoice",
@@ -25,7 +26,8 @@
     },
     "files": [
       "dist/**/*",
-      "main.js",
+      "main.cjs",
+      "preload.cjs",
       "package.json"
     ],
     "win": {

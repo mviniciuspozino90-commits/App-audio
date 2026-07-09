@@ -1,10 +1,8 @@
 import { useState, useEffect, useRef, useImperativeHandle, forwardRef, ChangeEvent } from 'react';
 import { Play, Pause, Volume2, VolumeX, Youtube, Music, Radio, SkipForward, AlertCircle, Globe, RefreshCw, Link, Compass, Info, ArrowLeft, ArrowRight, Home, Search } from 'lucide-react';
 
-// Check if running inside Electron wrapper
-const isElectron = typeof window !== 'undefined' && 
-  window.navigator && 
-  window.navigator.userAgent.toLowerCase().includes('electron');
+// Check if running inside Electron wrapper - disabled to run strictly as a website
+const isElectron = false;
 
 // Capitalized custom component reference to bypass TypeScript JSX.IntrinsicElements check safely
 const Webview = 'webview' as any;
@@ -34,10 +32,20 @@ declare global {
 }
 
 export const MusicPlayer = forwardRef<MusicPlayerControls, MusicPlayerProps>(({ onControlsReady }, ref) => {
-  const [activeTab, setActiveTab] = useState<'youtube' | 'local'>('youtube'); // youtube internally represents the web browser/radio player
+  const [activeTab, setActiveTab] = useState<'youtube' | 'local' | 'spotify'>('youtube'); // youtube internally represents the web browser/radio player
   const [isPlayingState, setIsPlayingState] = useState(false);
   const [volume, setVolume] = useState(100); // 0 to 100
   const [prevVolume, setPrevVolume] = useState(100);
+
+  // Spotify Web SDK Integration States
+  const [spotifyToken, setSpotifyToken] = useState<string | null>(localStorage.getItem('spotify_access_token'));
+  const [spotifyDeviceId, setSpotifyDeviceId] = useState<string | null>(null);
+  const [spotifyPlayer, setSpotifyPlayer] = useState<any>(null);
+  const [spotifyIsPlaying, setSpotifyIsPlaying] = useState(false);
+  const [spotifyCurrentTrack, setSpotifyCurrentTrack] = useState<any>(null);
+  const [spotifyError, setSpotifyError] = useState<string | null>(null);
+  const [spotifyAuthLoading, setSpotifyAuthLoading] = useState(false);
+  const spotifyPlayerInstanceRef = useRef<any>(null);
 
   // Web Browser States
   const [webUrl, setWebUrl] = useState('i9://home'); // Defaults to our customized Web Browser Start Page
@@ -66,6 +74,20 @@ export const MusicPlayer = forwardRef<MusicPlayerControls, MusicPlayerProps>(({ 
       node.addEventListener('did-navigate', handleNavigate);
       // did-navigate-in-page covers single page app (SPA) client-side routing like YouTube searches
       node.addEventListener('did-navigate-in-page', handleNavigate);
+
+      // dom-ready triggers when webview content loads, ensuring sync of volume and play states (Error 153 bypass)
+      node.addEventListener('dom-ready', () => {
+        try {
+          node.executeJavaScript(`
+            document.querySelectorAll("video, audio").forEach(el => {
+              el.volume = ${volume / 100};
+              ${isPlayingState ? 'el.play().catch(() => {});' : 'el.pause();'}
+            });
+          `);
+        } catch (e) {
+          console.error('Webview DOM Ready init error:', e);
+        }
+      });
     }
   };
 
@@ -150,9 +172,17 @@ export const MusicPlayer = forwardRef<MusicPlayerControls, MusicPlayerProps>(({ 
           }
           
           if (host.includes('spotify.com')) {
-            if (!url.pathname.startsWith('/embed')) {
-              return true;
+            const path = url.pathname;
+            if (path.startsWith('/embed') || 
+                path.startsWith('/track/') || 
+                path.startsWith('/playlist/') || 
+                path.startsWith('/album/') || 
+                path.startsWith('/artist/') || 
+                path.startsWith('/episode/') || 
+                path.startsWith('/show/')) {
+              return false;
             }
+            return true;
           }
           
           const blockedHosts = [
@@ -243,7 +273,7 @@ export const MusicPlayer = forwardRef<MusicPlayerControls, MusicPlayerProps>(({ 
         if (videoId) {
           return {
             url: `https://www.youtube.com/embed/${videoId}?autoplay=1&enablejsapi=1`,
-            mode: 'youtube_api',
+            mode: isElectron ? 'generic_iframe' : 'youtube_api',
             ytid: videoId
           };
         }
@@ -254,7 +284,7 @@ export const MusicPlayer = forwardRef<MusicPlayerControls, MusicPlayerProps>(({ 
         const videoId = parsed.pathname.split('/')[2];
         return {
           url: clean,
-          mode: 'youtube_api',
+          mode: isElectron ? 'generic_iframe' : 'youtube_api',
           ytid: videoId
         };
       }
@@ -318,6 +348,239 @@ export const MusicPlayer = forwardRef<MusicPlayerControls, MusicPlayerProps>(({ 
       ytPlayerRef.current = null;
       setIsYtReady(false);
     }
+    if (spotifyPlayerInstanceRef.current) {
+      try {
+        spotifyPlayerInstanceRef.current.pause();
+      } catch (e) {
+        console.error('Failed to pause Spotify on stopAllAudio:', e);
+      }
+    }
+  };
+
+  // Spotify Auth Redirect & Message Handlers
+  const handleSpotifyConnect = () => {
+    const clientId = import.meta.env.VITE_SPOTIFY_CLIENT_ID || '';
+    if (!clientId) {
+      setSpotifyError('VITE_SPOTIFY_CLIENT_ID não configurado. Por favor, adicione o Client ID do Spotify nas variáveis de ambiente (.env).');
+      return;
+    }
+
+    setSpotifyAuthLoading(true);
+    setSpotifyError(null);
+
+    const redirectUri = `${window.location.origin}/spotify-callback.html`;
+    const scopes = [
+      'streaming',
+      'user-read-playback-state',
+      'user-modify-playback-state',
+      'user-read-email',
+      'user-read-private'
+    ].join(' ');
+
+    const authUrl = `https://accounts.spotify.com/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=token&scope=${encodeURIComponent(scopes)}&show_dialog=true`;
+
+    const width = 500;
+    const height = 650;
+    const left = window.screen.width / 2 - width / 2;
+    const top = window.screen.height / 2 - height / 2;
+
+    const popup = window.open(
+      authUrl,
+      'SpotifyLogin',
+      `menubar=no,location=no,resizable=no,scrollbars=yes,status=no,width=${width},height=${height},top=${top},left=${left}`
+    );
+
+    if (!popup) {
+      setSpotifyAuthLoading(false);
+      alert('Por favor, permita popups para este site para conectar o Spotify.');
+    }
+  };
+
+  const handleSpotifyDisconnect = () => {
+    if (spotifyPlayerInstanceRef.current) {
+      try {
+        spotifyPlayerInstanceRef.current.disconnect();
+      } catch (e) {
+        // ignore
+      }
+      spotifyPlayerInstanceRef.current = null;
+    }
+    setSpotifyToken(null);
+    setSpotifyDeviceId(null);
+    setSpotifyPlayer(null);
+    setSpotifyIsPlaying(false);
+    setSpotifyCurrentTrack(null);
+    setSpotifyError(null);
+    localStorage.removeItem('spotify_access_token');
+  };
+
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) {
+        return;
+      }
+
+      if (event.data?.type === 'SPOTIFY_AUTH_SUCCESS') {
+        const token = event.data.token;
+        setSpotifyToken(token);
+        localStorage.setItem('spotify_access_token', token);
+        setSpotifyAuthLoading(false);
+        setSpotifyError(null);
+      } else if (event.data?.type === 'SPOTIFY_AUTH_ERROR') {
+        setSpotifyError(`Erro de autenticação: ${event.data.error}`);
+        setSpotifyAuthLoading(false);
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, []);
+
+  // Initialize Spotify Web Playback SDK
+  useEffect(() => {
+    if (!spotifyToken) {
+      if (spotifyPlayerInstanceRef.current) {
+        try {
+          spotifyPlayerInstanceRef.current.disconnect();
+        } catch (e) {}
+        spotifyPlayerInstanceRef.current = null;
+        setSpotifyPlayer(null);
+        setSpotifyDeviceId(null);
+      }
+      return;
+    }
+
+    window.onSpotifyWebPlaybackSDKReady = () => {
+      const player = new window.Spotify.Player({
+        name: 'i9 Fit Gym Web Player',
+        getOAuthToken: (cb: any) => cb(spotifyToken),
+        volume: volume / 100
+      });
+
+      player.addListener('ready', ({ device_id }: any) => {
+        console.log('Spotify SDK Ready with Device ID', device_id);
+        setSpotifyDeviceId(device_id);
+        setSpotifyError(null);
+      });
+
+      player.addListener('not_ready', ({ device_id }: any) => {
+        console.log('Spotify Device has gone offline', device_id);
+        setSpotifyDeviceId(null);
+      });
+
+      player.addListener('initialization_error', ({ message }: any) => {
+        console.error('Spotify Init Error:', message);
+        setSpotifyError(`Erro de Inicialização: ${message}`);
+      });
+
+      player.addListener('authentication_error', ({ message }: any) => {
+        console.error('Spotify Auth Error:', message);
+        setSpotifyError('Sua sessão expirou. Conecte sua conta novamente.');
+        handleSpotifyDisconnect();
+      });
+
+      player.addListener('account_error', ({ message }: any) => {
+        console.error('Spotify Account Error:', message);
+        setSpotifyError('O Spotify Web SDK exige Spotify Premium. Fallback para tocador padrão ativo.');
+      });
+
+      player.addListener('player_state_changed', (state: any) => {
+        if (!state) return;
+        setSpotifyIsPlaying(!state.paused);
+        setSpotifyCurrentTrack(state.track_window.current_track);
+        if (activeTab === 'spotify') {
+          setIsPlayingState(!state.paused);
+        }
+      });
+
+      player.connect().then((success: boolean) => {
+        if (success) {
+          console.log('Connected to Spotify Web Playback SDK!');
+        }
+      });
+
+      spotifyPlayerInstanceRef.current = player;
+      setSpotifyPlayer(player);
+    };
+
+    if (!window.Spotify) {
+      const script = document.createElement("script");
+      script.src = "https://sdk.scdn.co/spotify-player.js";
+      script.async = true;
+      document.body.appendChild(script);
+    } else {
+      if (window.onSpotifyWebPlaybackSDKReady) {
+        window.onSpotifyWebPlaybackSDKReady();
+      }
+    }
+  }, [spotifyToken]);
+
+  const playSpotifyUri = async (uri: string) => {
+    if (!spotifyToken || !spotifyDeviceId) {
+      console.log('Spotify SDK or device not ready, playing fallback URL in iframe.');
+      // Extract track or playlist ID to show in general iframe
+      const parts = uri.split(':');
+      if (parts.length >= 3) {
+        const type = parts[1];
+        const id = parts[2];
+        const embedUrl = `https://open.spotify.com/embed/${type}/${id}`;
+        setResolvedUrl(embedUrl);
+        setWebMode('generic_iframe');
+        setWebUrl(embedUrl);
+        setIframeKey(prev => prev + 1);
+        setIsPlayingState(true);
+      }
+      return;
+    }
+
+    const body: any = {};
+    if (uri.startsWith('spotify:track:')) {
+      body.uris = [uri];
+    } else {
+      body.context_uri = uri;
+    }
+
+    try {
+      const response = await fetch(`https://api.spotify.com/v1/me/player/play?device_id=${spotifyDeviceId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${spotifyToken}`
+        },
+        body: JSON.stringify(body)
+      });
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        console.error('Spotify Playback Request failed:', errData);
+        if (response.status === 403) {
+          setSpotifyError('O Spotify Web SDK exige Spotify Premium para iniciar reprodução direta.');
+        } else {
+          setSpotifyError(`Erro Spotify: ${errData.error?.message || 'Falha ao tocar no player.'}`);
+        }
+      } else {
+        setSpotifyError(null);
+        setIsPlayingState(true);
+      }
+    } catch (err) {
+      console.error('Failed playing Spotify:', err);
+      setSpotifyError('Erro de conexão ao iniciar faixa do Spotify.');
+    }
+  };
+
+  const getSpotifyUriFromUrl = (urlStr: string): string | null => {
+    try {
+      const url = new URL(urlStr);
+      if (!url.hostname.includes('spotify.com')) return null;
+      
+      const parts = url.pathname.split('/').filter(Boolean);
+      if (parts.length >= 2) {
+        const type = parts[0];
+        const id = parts[1];
+        return `spotify:${type}:${id}`;
+      }
+    } catch (e) {}
+    return null;
   };
 
   const initYoutubePlayer = (videoId: string) => {
@@ -374,8 +637,14 @@ export const MusicPlayer = forwardRef<MusicPlayerControls, MusicPlayerProps>(({ 
       }
     } else if (activeTab === 'local' && localAudioRef.current) {
       localAudioRef.current.volume = volume / 100;
+    } else if (activeTab === 'spotify' && spotifyPlayerInstanceRef.current) {
+      try {
+        spotifyPlayerInstanceRef.current.setVolume(volume / 100);
+      } catch (e) {
+        console.error('Failed to set Spotify volume:', e);
+      }
     }
-  }, [volume, activeTab, webMode, isYtReady]);
+  }, [volume, activeTab, webMode, isYtReady, spotifyPlayer]);
 
   // Handle local track completion (auto-advance)
   const playNextLocalTrack = () => {
@@ -503,6 +772,14 @@ export const MusicPlayer = forwardRef<MusicPlayerControls, MusicPlayerProps>(({ 
         }
       } else if (activeTab === 'local' && localAudioRef.current) {
         localAudioRef.current.pause();
+      } else if (activeTab === 'spotify') {
+        if (spotifyPlayerInstanceRef.current) {
+          try {
+            spotifyPlayerInstanceRef.current.pause();
+          } catch (e) {
+            console.error('Failed to pause Spotify in controls:', e);
+          }
+        }
       }
     },
     play: () => {
@@ -548,6 +825,14 @@ export const MusicPlayer = forwardRef<MusicPlayerControls, MusicPlayerProps>(({ 
         } else if (localAudioRef.current) {
           localAudioRef.current.play().catch(e => console.log(e));
         }
+      } else if (activeTab === 'spotify') {
+        if (spotifyPlayerInstanceRef.current) {
+          try {
+            spotifyPlayerInstanceRef.current.resume();
+          } catch (e) {
+            console.error('Failed to resume Spotify in controls:', e);
+          }
+        }
       }
     },
     setVolume: (vol: number) => {
@@ -587,6 +872,14 @@ export const MusicPlayer = forwardRef<MusicPlayerControls, MusicPlayerProps>(({ 
         }
       } else if (activeTab === 'local' && localAudioRef.current) {
         localAudioRef.current.volume = vol / 100;
+      } else if (activeTab === 'spotify') {
+        if (spotifyPlayerInstanceRef.current) {
+          try {
+            spotifyPlayerInstanceRef.current.setVolume(vol / 100);
+          } catch (e) {
+            console.error('Failed to set Spotify volume in controls:', e);
+          }
+        }
       }
     },
     getVolume: () => {
@@ -595,6 +888,9 @@ export const MusicPlayer = forwardRef<MusicPlayerControls, MusicPlayerProps>(({ 
     isPlaying: () => {
       if (activeTab === 'youtube' && webMode === 'generic_iframe' && resolvedUrl !== 'i9://home' && resolvedUrl !== 'about:blank' && !isIframeSuspended) {
         return true;
+      }
+      if (activeTab === 'spotify') {
+        return spotifyIsPlaying;
       }
       return isPlayingState;
     },
@@ -605,7 +901,7 @@ export const MusicPlayer = forwardRef<MusicPlayerControls, MusicPlayerProps>(({ 
   useEffect(() => {
     onControlsReady(controls);
     return () => onControlsReady(null);
-  }, [activeTab, webMode, isYtReady, localTracks, currentTrackIndex, isPlayingState]);
+  }, [activeTab, webMode, isYtReady, localTracks, currentTrackIndex, isPlayingState, spotifyIsPlaying, spotifyDeviceId, spotifyToken]);
 
   const togglePlay = () => {
     if (isPlayingState) {
@@ -615,7 +911,7 @@ export const MusicPlayer = forwardRef<MusicPlayerControls, MusicPlayerProps>(({ 
     }
   };
 
-  const selectTab = (tab: 'youtube' | 'local') => {
+  const selectTab = (tab: 'youtube' | 'local' | 'spotify') => {
     controls.pause();
     setActiveTab(tab);
     
@@ -631,6 +927,13 @@ export const MusicPlayer = forwardRef<MusicPlayerControls, MusicPlayerProps>(({ 
       setTimeout(() => {
         handleLoadWebUrl(webUrl);
       }, 50);
+    } else if (tab === 'spotify') {
+      // Auto-resume if we have active Spotify device and were playing
+      setTimeout(() => {
+        if (spotifyPlayerInstanceRef.current && isPlayingState) {
+          spotifyPlayerInstanceRef.current.resume().catch((e: any) => console.log(e));
+        }
+      }, 50);
     }
   };
 
@@ -642,12 +945,12 @@ export const MusicPlayer = forwardRef<MusicPlayerControls, MusicPlayerProps>(({ 
           MÚSICA E TRILHA DE FUNDO
         </h2>
         
-        {/* Toggle between Web Browser and Local Files */}
-        <div className="flex bg-zinc-900 p-1 rounded-lg text-xs font-bold border border-zinc-800">
+        {/* Toggle between Web Browser, Local Files, and Spotify */}
+        <div className="flex bg-zinc-900 p-1 rounded-lg text-xs font-bold border border-zinc-800 gap-1 flex-wrap">
           <button
             id="tab-yt"
             onClick={() => selectTab('youtube')}
-            className={`px-3 py-1.5 rounded-md flex items-center gap-1.5 transition-all cursor-pointer ${
+            className={`px-2.5 py-1.5 rounded-md flex items-center gap-1.5 transition-all cursor-pointer ${
               activeTab === 'youtube' ? 'bg-neon text-black font-black uppercase italic shadow-sm' : 'text-zinc-400 hover:text-white'
             }`}
           >
@@ -657,12 +960,22 @@ export const MusicPlayer = forwardRef<MusicPlayerControls, MusicPlayerProps>(({ 
           <button
             id="tab-local"
             onClick={() => selectTab('local')}
-            className={`px-3 py-1.5 rounded-md flex items-center gap-1.5 transition-all cursor-pointer ${
+            className={`px-2.5 py-1.5 rounded-md flex items-center gap-1.5 transition-all cursor-pointer ${
               activeTab === 'local' ? 'bg-neon text-black font-black uppercase italic shadow-sm' : 'text-zinc-400 hover:text-white'
             }`}
           >
             <Radio className="w-3.5 h-3.5" />
             Músicas Locais
+          </button>
+          <button
+            id="tab-spotify"
+            onClick={() => selectTab('spotify')}
+            className={`px-2.5 py-1.5 rounded-md flex items-center gap-1.5 transition-all cursor-pointer ${
+              activeTab === 'spotify' ? 'bg-[#1DB954] text-black font-black uppercase italic shadow-sm' : 'text-zinc-400 hover:text-white'
+            }`}
+          >
+            <Music className="w-3.5 h-3.5 text-current" />
+            Spotify
           </button>
         </div>
       </div>
@@ -734,7 +1047,7 @@ export const MusicPlayer = forwardRef<MusicPlayerControls, MusicPlayerProps>(({ 
                 <input
                   id="yt-url-input"
                   type="text"
-                  placeholder="Pesquise no Google ou digite uma URL (ex: youtube.com)..."
+                  placeholder="Pesquise no Google, cole link do YouTube (youtube.com) ou Spotify (open.spotify.com)..."
                   value={webUrl}
                   onChange={(e) => setWebUrl(e.target.value)}
                   onKeyDown={(e) => {
@@ -998,53 +1311,105 @@ export const MusicPlayer = forwardRef<MusicPlayerControls, MusicPlayerProps>(({ 
                     </div>
 
                     {/* Bottom: Speed Dial of Gym Playlists */}
-                    <div className="border-t border-zinc-900 pt-4">
-                      <h5 className="text-[10px] font-black uppercase text-zinc-400 tracking-wider mb-2.5 flex items-center gap-1">
-                        ⚡ Playlists de Treino Direto no App (Sem Bloqueios!)
-                      </h5>
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setWebUrl('https://www.youtube.com/watch?v=jfKfPfyJRdk');
-                            handleLoadWebUrl('https://www.youtube.com/watch?v=jfKfPfyJRdk');
-                          }}
-                          className="p-2 bg-zinc-900 border border-zinc-850 hover:border-neon rounded-lg text-left transition-all cursor-pointer flex items-center gap-2 group"
-                        >
-                          <span className="text-base">🧘</span>
-                          <div className="min-w-0">
-                            <p className="text-[9px] font-bold text-white uppercase group-hover:text-neon transition-colors">Gym Lofi Relax</p>
-                            <p className="text-[8px] text-zinc-500">Foco & Alongamentos</p>
-                          </div>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setWebUrl('https://www.youtube.com/watch?v=n93D-I0SAb4');
-                            handleLoadWebUrl('https://www.youtube.com/watch?v=n93D-I0SAb4');
-                          }}
-                          className="p-2 bg-zinc-900 border border-zinc-850 hover:border-neon rounded-lg text-left transition-all cursor-pointer flex items-center gap-2 group"
-                        >
-                          <span className="text-base">☠️</span>
-                          <div className="min-w-0">
-                            <p className="text-[9px] font-bold text-white uppercase group-hover:text-neon transition-colors">Gym Phonk Workout</p>
-                            <p className="text-[8px] text-zinc-500">Foco Extremo & Pesos</p>
-                          </div>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setWebUrl('https://www.youtube.com/watch?v=4xDzrJKXOOY');
-                            handleLoadWebUrl('https://www.youtube.com/watch?v=4xDzrJKXOOY');
-                          }}
-                          className="p-2 bg-zinc-900 border border-zinc-850 hover:border-neon rounded-lg text-left transition-all cursor-pointer flex items-center gap-2 group"
-                        >
-                          <span className="text-base">👾</span>
-                          <div className="min-w-0">
-                            <p className="text-[9px] font-bold text-white uppercase group-hover:text-neon transition-colors">Synthwave Gym</p>
-                            <p className="text-[8px] text-zinc-500">Energia Eletrônica Retro</p>
-                          </div>
-                        </button>
+                    <div className="border-t border-zinc-900 pt-4 space-y-4">
+                      <div>
+                        <h5 className="text-[10px] font-black uppercase text-zinc-400 tracking-wider mb-2 flex items-center gap-1.5">
+                          <Youtube className="w-3.5 h-3.5 text-red-500" /> Playlists de Treino (YouTube)
+                        </h5>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setWebUrl('https://www.youtube.com/watch?v=jfKfPfyJRdk');
+                              handleLoadWebUrl('https://www.youtube.com/watch?v=jfKfPfyJRdk');
+                            }}
+                            className="p-2 bg-zinc-900 border border-zinc-850 hover:border-neon rounded-lg text-left transition-all cursor-pointer flex items-center gap-2 group"
+                          >
+                            <span className="text-base">🧘</span>
+                            <div className="min-w-0">
+                              <p className="text-[9px] font-bold text-white uppercase group-hover:text-neon transition-colors">Gym Lofi Relax</p>
+                              <p className="text-[8px] text-zinc-500">Foco & Alongamentos</p>
+                            </div>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setWebUrl('https://www.youtube.com/watch?v=n93D-I0SAb4');
+                              handleLoadWebUrl('https://www.youtube.com/watch?v=n93D-I0SAb4');
+                            }}
+                            className="p-2 bg-zinc-900 border border-zinc-850 hover:border-neon rounded-lg text-left transition-all cursor-pointer flex items-center gap-2 group"
+                          >
+                            <span className="text-base">☠️</span>
+                            <div className="min-w-0">
+                              <p className="text-[9px] font-bold text-white uppercase group-hover:text-neon transition-colors">Gym Phonk Workout</p>
+                              <p className="text-[8px] text-zinc-500">Foco Extremo & Pesos</p>
+                            </div>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setWebUrl('https://www.youtube.com/watch?v=4xDzrJKXOOY');
+                              handleLoadWebUrl('https://www.youtube.com/watch?v=4xDzrJKXOOY');
+                            }}
+                            className="p-2 bg-zinc-900 border border-zinc-850 hover:border-neon rounded-lg text-left transition-all cursor-pointer flex items-center gap-2 group"
+                          >
+                            <span className="text-base">👾</span>
+                            <div className="min-w-0">
+                              <p className="text-[9px] font-bold text-white uppercase group-hover:text-neon transition-colors">Synthwave Gym</p>
+                              <p className="text-[8px] text-zinc-500">Energia Eletrônica Retro</p>
+                            </div>
+                          </button>
+                        </div>
+                      </div>
+
+                      <div>
+                        <h5 className="text-[10px] font-black uppercase text-zinc-400 tracking-wider mb-2 flex items-center gap-1.5">
+                          <Music className="w-3.5 h-3.5 text-emerald-500" /> Playlists de Treino (Spotify)
+                        </h5>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setWebUrl('https://open.spotify.com/playlist/37i9dQZF1DX76t638V698y');
+                              handleLoadWebUrl('https://open.spotify.com/playlist/37i9dQZF1DX76t638V698y');
+                            }}
+                            className="p-2 bg-zinc-900 border border-zinc-850 hover:border-neon rounded-lg text-left transition-all cursor-pointer flex items-center gap-2 group"
+                          >
+                            <span className="text-base">🦁</span>
+                            <div className="min-w-0">
+                              <p className="text-[9px] font-bold text-white uppercase group-hover:text-neon transition-colors">Beast Mode</p>
+                              <p className="text-[8px] text-zinc-500">Motivação & Força Máxima</p>
+                            </div>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setWebUrl('https://open.spotify.com/playlist/37i9dQZF1DX72D76dfYg93');
+                              handleLoadWebUrl('https://open.spotify.com/playlist/37i9dQZF1DX72D76dfYg93');
+                            }}
+                            className="p-2 bg-zinc-900 border border-zinc-850 hover:border-neon rounded-lg text-left transition-all cursor-pointer flex items-center gap-2 group"
+                          >
+                            <span className="text-base">⚡</span>
+                            <div className="min-w-0">
+                              <p className="text-[9px] font-bold text-white uppercase group-hover:text-neon transition-colors">Workout Beats</p>
+                              <p className="text-[8px] text-zinc-500">Batidas Eletrônicas Intensas</p>
+                            </div>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setWebUrl('https://open.spotify.com/playlist/37i9dQZF1DX0hZ8NgeYmC4');
+                              handleLoadWebUrl('https://open.spotify.com/playlist/37i9dQZF1DX0hZ8NgeYmC4');
+                            }}
+                            className="p-2 bg-zinc-900 border border-zinc-850 hover:border-neon rounded-lg text-left transition-all cursor-pointer flex items-center gap-2 group"
+                          >
+                            <span className="text-base">💥</span>
+                            <div className="min-w-0">
+                              <p className="text-[9px] font-bold text-white uppercase group-hover:text-neon transition-colors">Power Hour</p>
+                              <p className="text-[8px] text-zinc-500">Energia Máxima para Cardio</p>
+                            </div>
+                          </button>
+                        </div>
                       </div>
                     </div>
 
@@ -1122,7 +1487,7 @@ export const MusicPlayer = forwardRef<MusicPlayerControls, MusicPlayerProps>(({ 
 
           </div>
         </div>
-      ) : (
+      ) : activeTab === 'local' ? (
         <div className="space-y-4">
           <div className="border-2 border-dashed border-zinc-800 hover:border-neon rounded-xl p-4 text-center transition-all cursor-pointer relative bg-zinc-900/40 hover:bg-zinc-900/80">
             <input
@@ -1171,6 +1536,191 @@ export const MusicPlayer = forwardRef<MusicPlayerControls, MusicPlayerProps>(({ 
             </div>
           )}
         </div>
+      ) : (
+        /* Spotify Tab Panel */
+        <div className="space-y-4 animate-fade-in">
+          {!spotifyToken ? (
+            <div className="bg-zinc-950/40 p-6 rounded-xl border border-zinc-800 text-center space-y-4">
+              <div className="p-3 bg-[#1DB954]/10 rounded-full text-[#1DB954] w-fit mx-auto">
+                <Music className="w-8 h-8" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-sm font-bold text-white uppercase tracking-wider">Conecte sua conta Spotify</h3>
+                <p className="text-[11px] text-zinc-400 max-w-sm mx-auto leading-relaxed">
+                  Toque suas playlists favoritas de treino diretamente no player do i9 Fit com suporte a transições suaves e diminuição de volume automática (ducking).
+                </p>
+              </div>
+
+              {spotifyError && (
+                <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-[10px] text-red-400 max-w-xs mx-auto font-mono">
+                  {spotifyError}
+                </div>
+              )}
+
+              <button
+                onClick={handleSpotifyConnect}
+                disabled={spotifyAuthLoading}
+                className="mx-auto px-5 py-2.5 bg-[#1DB954] text-black hover:bg-[#1ed760] disabled:bg-zinc-700 disabled:text-zinc-500 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-2 cursor-pointer transition-all shadow-md shadow-[#1DB954]/10"
+              >
+                {spotifyAuthLoading ? (
+                  <span>Conectando...</span>
+                ) : (
+                  <>
+                    <Globe className="w-4 h-4 fill-current" />
+                    CONECTAR SPOTIFY
+                  </>
+                )}
+              </button>
+              
+              <div className="text-[9px] text-zinc-500 max-w-xs mx-auto">
+                Nota: O Spotify exige uma conta <strong>Premium</strong> para reprodução direta pelo SDK na Web.
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {/* Spotify Player Status Bar */}
+              <div className="flex items-center justify-between bg-zinc-950 p-3 rounded-xl border border-zinc-900 text-xs">
+                <div className="flex items-center gap-2">
+                  <div className={`w-2.5 h-2.5 rounded-full ${spotifyDeviceId ? 'bg-[#1DB954] animate-pulse' : 'bg-amber-500'}`} />
+                  <span className="font-bold text-zinc-300">
+                    {spotifyDeviceId ? 'i9 Fit Gym Web Player (Pronto)' : 'Conectando dispositivo...'}
+                  </span>
+                </div>
+                <button
+                  onClick={handleSpotifyDisconnect}
+                  className="text-[10px] uppercase font-bold text-zinc-500 hover:text-red-400 transition-all cursor-pointer"
+                >
+                  Desconectar
+                </button>
+              </div>
+
+              {spotifyError && (
+                <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-[10px] text-red-400 font-mono">
+                  {spotifyError}
+                </div>
+              )}
+
+              {/* Currently Playing Track Details */}
+              {spotifyCurrentTrack ? (
+                <div className="flex items-center gap-3 bg-[#1DB954]/5 border border-[#1DB954]/10 rounded-xl p-3">
+                  {spotifyCurrentTrack.album?.images?.[0]?.url ? (
+                    <img
+                      src={spotifyCurrentTrack.album.images[0].url}
+                      alt="Capa do álbum"
+                      className="w-12 h-12 rounded-lg object-cover shadow-md shrink-0"
+                      referrerPolicy="no-referrer"
+                    />
+                  ) : (
+                    <div className="w-12 h-12 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center shrink-0">
+                      <Music className="w-5 h-5 text-zinc-600" />
+                    </div>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-black text-white truncate uppercase tracking-tight">{spotifyCurrentTrack.name}</p>
+                    <p className="text-[10px] text-zinc-400 truncate mt-0.5">{spotifyCurrentTrack.artists?.map((a: any) => a.name).join(', ')}</p>
+                  </div>
+                  {spotifyIsPlaying && (
+                    <div className="flex gap-0.5 items-end h-4 shrink-0 pr-1">
+                      <span className="w-1 h-3 bg-[#1DB954] animate-pulse rounded-full"></span>
+                      <span className="w-1 h-2 bg-[#1DB954] animate-pulse delay-75 rounded-full"></span>
+                      <span className="w-1 h-4 bg-[#1DB954] animate-pulse delay-150 rounded-full"></span>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="p-4 bg-zinc-950/20 border border-zinc-900 rounded-xl text-center text-xs text-zinc-500 font-mono">
+                  Abra o Spotify em seu celular/computador ou clique em uma das playlists recomendadas abaixo para iniciar!
+                </div>
+              )}
+
+              {/* Curated Workout Playlists */}
+              <div className="space-y-2">
+                <h4 className="text-[10px] font-black uppercase text-zinc-400 tracking-wider">Playlists Recomendadas de Treino</h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <button
+                    onClick={() => playSpotifyUri('spotify:playlist:37i9dQZF1DX8U9A6Z0v7vS')}
+                    className="p-2.5 bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 text-left rounded-lg text-xs cursor-pointer transition-all flex items-center gap-2 group w-full"
+                  >
+                    <div className="w-8 h-8 rounded bg-[#1DB954]/10 flex items-center justify-center text-[#1DB954] shrink-0 font-bold group-hover:scale-105 transition-all">🔥</div>
+                    <div className="truncate text-left">
+                      <p className="font-bold text-zinc-200 group-hover:text-white truncate">Treino Estilo Livre</p>
+                      <p className="text-[9px] text-zinc-500 truncate">Best Fitness Hits</p>
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => playSpotifyUri('spotify:playlist:37i9dQZF1DX76t638V6eg8')}
+                    className="p-2.5 bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 text-left rounded-lg text-xs cursor-pointer transition-all flex items-center gap-2 group w-full"
+                  >
+                    <div className="w-8 h-8 rounded bg-[#1DB954]/10 flex items-center justify-center text-[#1DB954] shrink-0 font-bold group-hover:scale-105 transition-all">⚡</div>
+                    <div className="truncate text-left">
+                      <p className="font-bold text-zinc-200 group-hover:text-white truncate">Treino Eletrônico</p>
+                      <p className="text-[9px] text-zinc-500 truncate">Cardio Workout</p>
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => playSpotifyUri('spotify:playlist:37i9dQZF1DX2pSTOxoPbx9')}
+                    className="p-2.5 bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 text-left rounded-lg text-xs cursor-pointer transition-all flex items-center gap-2 group w-full"
+                  >
+                    <div className="w-8 h-8 rounded bg-[#1DB954]/10 flex items-center justify-center text-[#1DB954] shrink-0 font-bold group-hover:scale-105 transition-all">🎸</div>
+                    <div className="truncate text-left">
+                      <p className="font-bold text-zinc-200 group-hover:text-white truncate">Treino Heavy Rock</p>
+                      <p className="text-[9px] text-zinc-500 truncate">Rock Workout</p>
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => playSpotifyUri('spotify:playlist:37i9dQZF1DX4sWSp43b7C4')}
+                    className="p-2.5 bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 text-left rounded-lg text-xs cursor-pointer transition-all flex items-center gap-2 group w-full"
+                  >
+                    <div className="w-8 h-8 rounded bg-[#1DB954]/10 flex items-center justify-center text-[#1DB954] shrink-0 font-bold group-hover:scale-105 transition-all">🎤</div>
+                    <div className="truncate text-left">
+                      <p className="font-bold text-zinc-200 group-hover:text-white truncate">Treino Hip Hop</p>
+                      <p className="text-[9px] text-zinc-500 truncate">Workout Beats</p>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              {/* Paste Spotify URL or URI */}
+              <div className="space-y-2 bg-zinc-950 p-3 rounded-xl border border-zinc-900">
+                <h4 className="text-[9px] font-black uppercase text-zinc-400 tracking-wider">Tocar outra playlist ou faixa</h4>
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    const form = e.currentTarget;
+                    const input = form.elements.namedItem('spotifyUrl') as HTMLInputElement;
+                    if (input && input.value) {
+                      const inputVal = input.value.trim();
+                      if (inputVal.startsWith('spotify:')) {
+                        playSpotifyUri(inputVal);
+                      } else {
+                        const uri = getSpotifyUriFromUrl(inputVal);
+                        if (uri) {
+                          playSpotifyUri(uri);
+                        } else {
+                          setSpotifyError('URL inválida. Cole um link do Spotify (Ex: https://open.spotify.com/playlist/...)');
+                        }
+                      }
+                    }
+                  }}
+                  className="flex gap-2"
+                >
+                  <input
+                    name="spotifyUrl"
+                    type="text"
+                    placeholder="Cole o link ou URI do Spotify aqui..."
+                    className="flex-1 bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-1.5 text-xs text-zinc-200 focus:outline-hidden focus:border-[#1DB954] transition-all font-mono"
+                  />
+                  <button
+                    type="submit"
+                    className="px-3 py-1.5 bg-[#1DB954] hover:bg-[#1ed760] text-black font-black uppercase text-[9px] rounded-lg cursor-pointer transition-all tracking-wider shrink-0"
+                  >
+                    Carregar
+                  </button>
+                </form>
+              </div>
+            </div>
+          )}
+        </div>
       )}
 
       {/* Shared Playback Controls Footer Bar */}
@@ -1179,7 +1729,10 @@ export const MusicPlayer = forwardRef<MusicPlayerControls, MusicPlayerProps>(({ 
           <button
             id="music-play-toggle"
             onClick={togglePlay}
-            disabled={activeTab === 'local' && localTracks.length === 0}
+            disabled={
+              (activeTab === 'local' && localTracks.length === 0) ||
+              (activeTab === 'spotify' && !spotifyToken)
+            }
             className={`w-10 h-10 rounded-full flex items-center justify-center transition-all shrink-0 cursor-pointer ${
               isPlayingState
                 ? 'bg-zinc-800 text-white hover:bg-zinc-700'
@@ -1189,10 +1742,17 @@ export const MusicPlayer = forwardRef<MusicPlayerControls, MusicPlayerProps>(({ 
             {isPlayingState ? <Pause className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current ml-0.5" />}
           </button>
 
-          {activeTab === 'local' && localTracks.length > 0 && (
+          {((activeTab === 'local' && localTracks.length > 0) ||
+            (activeTab === 'spotify' && spotifyToken && spotifyDeviceId)) && (
             <button
               id="music-skip-btn"
-              onClick={playNextLocalTrack}
+              onClick={() => {
+                if (activeTab === 'local') {
+                  playNextLocalTrack();
+                } else if (activeTab === 'spotify' && spotifyPlayerInstanceRef.current) {
+                  spotifyPlayerInstanceRef.current.nextTrack().catch((e: any) => console.log(e));
+                }
+              }}
               className="p-2 hover:bg-zinc-800 rounded-lg text-zinc-400 hover:text-white transition-all shrink-0 cursor-pointer"
               title="Próxima faixa"
             >
@@ -1208,6 +1768,10 @@ export const MusicPlayer = forwardRef<MusicPlayerControls, MusicPlayerProps>(({ 
                   : webMode === 'youtube_api' && isYtReady
                   ? 'Vídeo do YouTube Ativo'
                   : 'Navegador Web Ativo'
+                : activeTab === 'spotify'
+                ? spotifyCurrentTrack
+                  ? spotifyCurrentTrack.name
+                  : 'Spotify Web Player'
                 : currentTrackIndex !== -1 && localTracks[currentTrackIndex]
                 ? localTracks[currentTrackIndex].name
                 : 'Sem faixas locais na fila'}
