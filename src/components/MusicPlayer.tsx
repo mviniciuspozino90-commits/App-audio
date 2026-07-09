@@ -32,7 +32,7 @@ declare global {
 }
 
 export const MusicPlayer = forwardRef<MusicPlayerControls, MusicPlayerProps>(({ onControlsReady }, ref) => {
-  const [activeTab, setActiveTab] = useState<'youtube' | 'local' | 'spotify'>('youtube'); // youtube internally represents the web browser/radio player
+  const [activeTab, setActiveTab] = useState<'youtube' | 'local' | 'spotify'>('spotify'); // spotify is default active tab now
   const [isPlayingState, setIsPlayingState] = useState(false);
   const [volume, setVolume] = useState(100); // 0 to 100
   const [prevVolume, setPrevVolume] = useState(100);
@@ -948,6 +948,16 @@ export const MusicPlayer = forwardRef<MusicPlayerControls, MusicPlayerProps>(({ 
         {/* Toggle between Web Browser, Local Files, and Spotify */}
         <div className="flex bg-zinc-900 p-1 rounded-lg text-xs font-bold border border-zinc-800 gap-1 flex-wrap">
           <button
+            id="tab-spotify"
+            onClick={() => selectTab('spotify')}
+            className={`px-2.5 py-1.5 rounded-md flex items-center gap-1.5 transition-all cursor-pointer ${
+              activeTab === 'spotify' ? 'bg-[#1DB954] text-black font-black uppercase italic shadow-sm' : 'text-zinc-400 hover:text-white'
+            }`}
+          >
+            <Music className="w-3.5 h-3.5 text-current" />
+            Spotify
+          </button>
+          <button
             id="tab-yt"
             onClick={() => selectTab('youtube')}
             className={`px-2.5 py-1.5 rounded-md flex items-center gap-1.5 transition-all cursor-pointer ${
@@ -966,16 +976,6 @@ export const MusicPlayer = forwardRef<MusicPlayerControls, MusicPlayerProps>(({ 
           >
             <Radio className="w-3.5 h-3.5" />
             Músicas Locais
-          </button>
-          <button
-            id="tab-spotify"
-            onClick={() => selectTab('spotify')}
-            className={`px-2.5 py-1.5 rounded-md flex items-center gap-1.5 transition-all cursor-pointer ${
-              activeTab === 'spotify' ? 'bg-[#1DB954] text-black font-black uppercase italic shadow-sm' : 'text-zinc-400 hover:text-white'
-            }`}
-          >
-            <Music className="w-3.5 h-3.5 text-current" />
-            Spotify
           </button>
         </div>
       </div>
