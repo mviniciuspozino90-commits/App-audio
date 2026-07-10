@@ -66,6 +66,7 @@ export const MusicPlayer = forwardRef<MusicPlayerControls, MusicPlayerProps>(({ 
   const [spotifyAuthLoading, setSpotifyAuthLoading] = useState(false);
   const [spotifyClientId, setSpotifyClientId] = useState<string>(import.meta.env.VITE_SPOTIFY_CLIENT_ID || localStorage.getItem('spotify_client_id') || '');
   const spotifyPlayerInstanceRef = useRef<any>(null);
+  const [spotifyEmbedUrl, setSpotifyEmbedUrl] = useState<string>('https://open.spotify.com/embed/playlist/37i9dQZF1DX8U9A6Z0v7vS');
 
   // Web Browser States
   const [webUrl, setWebUrl] = useState('i9://home'); // Defaults to our customized Web Browser Start Page
@@ -554,7 +555,9 @@ export const MusicPlayer = forwardRef<MusicPlayerControls, MusicPlayerProps>(({ 
   }, [spotifyToken]);
 
   const playSpotifyUri = async (uri: string) => {
-    if (!spotifyToken || !spotifyDeviceId) {
+    const isPremiumError = spotifyError && (spotifyError.includes('Premium') || spotifyError.includes('Web SDK'));
+
+    if (!spotifyToken || !spotifyDeviceId || isPremiumError) {
       console.log('Spotify SDK or device not ready, playing fallback URL in iframe.');
       // Extract track or playlist ID to show in general iframe
       const parts = uri.split(':');
@@ -565,6 +568,7 @@ export const MusicPlayer = forwardRef<MusicPlayerControls, MusicPlayerProps>(({ 
         setResolvedUrl(embedUrl);
         setWebMode('generic_iframe');
         setWebUrl(embedUrl);
+        setSpotifyEmbedUrl(embedUrl);
         setIframeKey(prev => prev + 1);
         setIsPlayingState(true);
       }
@@ -1686,9 +1690,13 @@ export const MusicPlayer = forwardRef<MusicPlayerControls, MusicPlayerProps>(({ 
               {/* Spotify Player Status Bar */}
               <div className="flex items-center justify-between bg-zinc-950 p-3 rounded-xl border border-zinc-900 text-xs gap-2 flex-wrap sm:flex-nowrap">
                 <div className="flex items-center gap-2">
-                  <div className={`w-2.5 h-2.5 rounded-full ${spotifyDeviceId ? 'bg-[#1DB954] animate-pulse' : 'bg-amber-500'}`} />
+                  <div className={`w-2.5 h-2.5 rounded-full ${spotifyDeviceId ? 'bg-[#1DB954] animate-pulse' : (spotifyError && (spotifyError.includes('Premium') || spotifyError.includes('Web SDK'))) ? 'bg-cyan-500 animate-pulse' : 'bg-amber-500'}`} />
                   <span className="font-bold text-zinc-300">
-                    {spotifyDeviceId ? 'i9 Fit Gym Web Player (Pronto)' : 'Conectando dispositivo...'}
+                    {spotifyDeviceId 
+                      ? 'i9 Fit Gym Web Player (Pronto)' 
+                      : (spotifyError && (spotifyError.includes('Premium') || spotifyError.includes('Web SDK')))
+                        ? 'Spotify Player (Modo Embed - Conta Free)'
+                        : 'Conectando dispositivo...'}
                   </span>
                 </div>
                 <div className="flex gap-3 shrink-0">
@@ -1713,37 +1721,61 @@ export const MusicPlayer = forwardRef<MusicPlayerControls, MusicPlayerProps>(({ 
                 </div>
               )}
 
-              {/* Currently Playing Track Details */}
-              {spotifyCurrentTrack ? (
-                <div className="flex items-center gap-3 bg-[#1DB954]/5 border border-[#1DB954]/10 rounded-xl p-3">
-                  {spotifyCurrentTrack.album?.images?.[0]?.url ? (
-                    <img
-                      src={spotifyCurrentTrack.album.images[0].url}
-                      alt="Capa do álbum"
-                      className="w-12 h-12 rounded-lg object-cover shadow-md shrink-0"
-                      referrerPolicy="no-referrer"
-                    />
-                  ) : (
-                    <div className="w-12 h-12 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center shrink-0">
-                      <Music className="w-5 h-5 text-zinc-600" />
-                    </div>
-                  )}
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs font-black text-white truncate uppercase tracking-tight">{spotifyCurrentTrack.name}</p>
-                    <p className="text-[10px] text-zinc-400 truncate mt-0.5">{spotifyCurrentTrack.artists?.map((a: any) => a.name).join(', ')}</p>
+              {/* Fallback Spotify Embed Player for Free Accounts / Device offline */}
+              {(!spotifyDeviceId || (spotifyError && (spotifyError.includes('Premium') || spotifyError.includes('Web SDK')))) && (
+                <div className="space-y-2 bg-zinc-950/40 p-3 rounded-xl border border-zinc-900">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-black uppercase text-zinc-400 tracking-wider">Tocador Spotify (Modo Embed)</span>
+                    <span className="text-[8px] font-bold text-[#1DB954] bg-[#1DB954]/10 px-1.5 py-0.5 rounded-full uppercase">Conta Free / Fallback Ativo</span>
                   </div>
-                  {spotifyIsPlaying && (
-                    <div className="flex gap-0.5 items-end h-4 shrink-0 pr-1">
-                      <span className="w-1 h-3 bg-[#1DB954] animate-pulse rounded-full"></span>
-                      <span className="w-1 h-2 bg-[#1DB954] animate-pulse delay-75 rounded-full"></span>
-                      <span className="w-1 h-4 bg-[#1DB954] animate-pulse delay-150 rounded-full"></span>
+                  <iframe
+                    src={spotifyEmbedUrl}
+                    width="100%"
+                    height="352"
+                    allowFullScreen={true}
+                    allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
+                    loading="lazy"
+                    className="rounded-lg border border-zinc-800 bg-zinc-950"
+                  />
+                  <p className="text-[9px] text-zinc-500 leading-normal text-center">
+                    Dica: No modo gratuito do Spotify, você pode ouvir prévias das músicas diretamente ou controlar o aplicativo do Spotify oficial no seu celular/computador.
+                  </p>
+                </div>
+              )}
+
+              {/* Currently Playing Track Details (only shown if SDK is active with premium account) */}
+              {spotifyDeviceId && (
+                spotifyCurrentTrack ? (
+                  <div className="flex items-center gap-3 bg-[#1DB954]/5 border border-[#1DB954]/10 rounded-xl p-3">
+                    {spotifyCurrentTrack.album?.images?.[0]?.url ? (
+                      <img
+                        src={spotifyCurrentTrack.album.images[0].url}
+                        alt="Capa do álbum"
+                        className="w-12 h-12 rounded-lg object-cover shadow-md shrink-0"
+                        referrerPolicy="no-referrer"
+                      />
+                    ) : (
+                      <div className="w-12 h-12 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center shrink-0">
+                        <Music className="w-5 h-5 text-zinc-600" />
+                      </div>
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-black text-white truncate uppercase tracking-tight">{spotifyCurrentTrack.name}</p>
+                      <p className="text-[10px] text-zinc-400 truncate mt-0.5">{spotifyCurrentTrack.artists?.map((a: any) => a.name).join(', ')}</p>
                     </div>
-                  )}
-                </div>
-              ) : (
-                <div className="p-4 bg-zinc-950/20 border border-zinc-900 rounded-xl text-center text-xs text-zinc-500 font-mono">
-                  Abra o Spotify em seu celular/computador ou clique em uma das playlists recomendadas abaixo para iniciar!
-                </div>
+                    {spotifyIsPlaying && (
+                      <div className="flex gap-0.5 items-end h-4 shrink-0 pr-1">
+                        <span className="w-1 h-3 bg-[#1DB954] animate-pulse rounded-full"></span>
+                        <span className="w-1 h-2 bg-[#1DB954] animate-pulse delay-75 rounded-full"></span>
+                        <span className="w-1 h-4 bg-[#1DB954] animate-pulse delay-150 rounded-full"></span>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="p-4 bg-zinc-950/20 border border-zinc-900 rounded-xl text-center text-xs text-zinc-500 font-mono">
+                    Abra o Spotify em seu celular/computador ou clique em uma das playlists recomendadas abaixo para iniciar!
+                  </div>
+                )
               )}
 
               {/* Curated Workout Playlists */}
