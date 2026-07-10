@@ -1653,6 +1653,19 @@ export const MusicPlayer = forwardRef<MusicPlayerControls, MusicPlayerProps>(({ 
                     )}
                   </button>
 
+                  <div className="max-w-xs mx-auto bg-zinc-950 p-3 rounded-lg border border-zinc-900 text-[10px] text-zinc-400 text-left space-y-1.5 mt-2">
+                    <p className="font-bold text-[#1DB954] text-[9px] uppercase tracking-wider">Atenção ao Redirect URI!</p>
+                    <p className="text-[9px] leading-normal">
+                      Se você ver o erro de <strong>redirect_uri: Not matching configuration</strong>, acesse o <strong>Settings</strong> do seu aplicativo no Dashboard do Spotify e adicione EXATAMENTE o seguinte link na lista de Redirect URIs:
+                    </p>
+                    <div className="bg-zinc-900 p-1.5 rounded font-mono text-[8px] break-all select-all text-zinc-200 border border-zinc-800">
+                      {window.location.origin}/spotify-callback.html
+                    </div>
+                    <p className="text-[8px] text-zinc-500">
+                      Não se esqueça de clicar em <strong>Add</strong> e depois em <strong>Save</strong> no final da página do Spotify!
+                    </p>
+                  </div>
+
                   <div className="flex justify-center">
                     <button
                       onClick={handleResetClientId}
