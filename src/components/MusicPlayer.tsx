@@ -31,6 +31,25 @@ declare global {
   }
 }
 
+const generateRandomString = (length: number): string => {
+  const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  const values = crypto.getRandomValues(new Uint8Array(length));
+  return values.reduce((acc, x) => acc + possible[x % possible.length], '');
+};
+
+const generateCodeChallenge = async (codeVerifier: string): Promise<string> => {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(codeVerifier);
+  const digest = await window.crypto.subtle.digest('SHA-256', data);
+  const array = Array.from(new Uint8Array(digest));
+  const binary = array.map(byte => String.fromCharCode(byte)).join('');
+  const base64 = btoa(binary);
+  return base64
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
+};
+
 export const MusicPlayer = forwardRef<MusicPlayerControls, MusicPlayerProps>(({ onControlsReady }, ref) => {
   const [activeTab, setActiveTab] = useState<'youtube' | 'local' | 'spotify'>('spotify'); // spotify is default active tab now
   const [isPlayingState, setIsPlayingState] = useState(false);
@@ -359,7 +378,7 @@ export const MusicPlayer = forwardRef<MusicPlayerControls, MusicPlayerProps>(({ 
   };
 
   // Spotify Auth Redirect & Message Handlers
-  const handleSpotifyConnect = () => {
+  const handleSpotifyConnect = async () => {
     if (!spotifyClientId) {
       setSpotifyError('Client ID do Spotify não configurado. Por favor, adicione-o no campo abaixo.');
       return;
@@ -377,22 +396,35 @@ export const MusicPlayer = forwardRef<MusicPlayerControls, MusicPlayerProps>(({ 
       'user-read-private'
     ].join(' ');
 
-    const authUrl = `https://accounts.spotify.com/authorize?client_id=${spotifyClientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=token&scope=${encodeURIComponent(scopes)}&show_dialog=true`;
+    try {
+      // PKCE Code Flow logic
+      const codeVerifier = generateRandomString(64);
+      const codeChallenge = await generateCodeChallenge(codeVerifier);
 
-    const width = 500;
-    const height = 650;
-    const left = window.screen.width / 2 - width / 2;
-    const top = window.screen.height / 2 - height / 2;
+      // Save both in localStorage for use by the callback page
+      localStorage.setItem('spotify_code_verifier', codeVerifier);
+      localStorage.setItem('spotify_client_id', spotifyClientId);
 
-    const popup = window.open(
-      authUrl,
-      'SpotifyLogin',
-      `menubar=no,location=no,resizable=no,scrollbars=yes,status=no,width=${width},height=${height},top=${top},left=${left}`
-    );
+      const authUrl = `https://accounts.spotify.com/authorize?client_id=${spotifyClientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent(scopes)}&code_challenge_method=S256&code_challenge=${codeChallenge}&show_dialog=true`;
 
-    if (!popup) {
+      const width = 500;
+      const height = 650;
+      const left = window.screen.width / 2 - width / 2;
+      const top = window.screen.height / 2 - height / 2;
+
+      const popup = window.open(
+        authUrl,
+        'SpotifyLogin',
+        `menubar=no,location=no,resizable=no,scrollbars=yes,status=no,width=${width},height=${height},top=${top},left=${left}`
+      );
+
+      if (!popup) {
+        setSpotifyAuthLoading(false);
+        alert('Por favor, permita popups para este site para conectar o Spotify.');
+      }
+    } catch (err: any) {
+      setSpotifyError(`Erro ao iniciar autenticação: ${err.message || err}`);
       setSpotifyAuthLoading(false);
-      alert('Por favor, permita popups para este site para conectar o Spotify.');
     }
   };
 
