@@ -4,6 +4,7 @@ import { MusicPlayer, MusicPlayerControls } from './components/MusicPlayer';
 import { AudioCreator } from './components/AudioCreator';
 import { ScheduleManager } from './components/ScheduleManager';
 import { LogView } from './components/LogView';
+import { VoiceTester } from './components/VoiceTester';
 import { getAudios, getSchedules, getLogs, saveLog, saveAudio, saveSchedule } from './utils/db';
 import { 
   Clock, Info, VolumeX, Volume2, ShieldCheck, Play, HelpCircle, 
@@ -249,8 +250,8 @@ export default function App() {
 
           const text = decodeURIComponent(textPart);
           const params = new URLSearchParams(queryPart);
-          const rate = parseFloat(params.get('rate') || '1');
-          const pitch = parseFloat(params.get('pitch') || '1');
+          const rate = parseFloat(params.get('rate') || '1.08');
+          const pitch = parseFloat(params.get('pitch') || '1.15');
           const voiceName = params.get('voice') || '';
 
           const utterance = new SpeechSynthesisUtterance(text);
@@ -411,18 +412,37 @@ export default function App() {
           </div>
 
           {/* Clock Dashboard & Active status */}
-          <div id="clock-dashboard-panel" className="text-center md:text-right flex flex-col items-center md:items-end bg-zinc-900/40 border border-zinc-800/80 px-5 py-2.5 rounded-xl">
-            <div className="text-3xl md:text-5xl font-mono leading-none tracking-tighter text-white font-bold tabular-nums">
-              {formattedTime}
-            </div>
-            <div className="flex items-center justify-center md:justify-end mt-2 gap-2">
-              <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wide">
-                {formattedDay} • {formattedDate}
-              </span>
-              <div className="w-2 h-2 bg-neon rounded-full animate-pulse"></div>
-              <span className="text-[10px] uppercase font-bold tracking-wider text-zinc-500">
-                ACTIVE
-              </span>
+          <div className="flex flex-col sm:flex-row items-center gap-4">
+            <button
+              onClick={() => {
+                const element = document.getElementById('voice-tester-panel');
+                if (element) {
+                  element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  element.classList.add('ring-2', 'ring-neon', 'ring-offset-2', 'ring-offset-black');
+                  setTimeout(() => {
+                    element.classList.remove('ring-2', 'ring-neon', 'ring-offset-2', 'ring-offset-black');
+                  }, 2000);
+                }
+              }}
+              className="px-4 py-2.5 bg-zinc-900/85 hover:bg-zinc-800 border border-zinc-800 text-xs font-black uppercase italic text-neon rounded-xl flex items-center gap-2 cursor-pointer transition-all hover:border-neon/40 shadow-md hover:shadow-neon/5 hover:scale-[1.02] active:scale-[0.98]"
+            >
+              <Volume2 className="w-4 h-4 animate-pulse" />
+              TESTAR VOZ DO SISTEMA
+            </button>
+
+            <div id="clock-dashboard-panel" className="text-center md:text-right flex flex-col items-center md:items-end bg-zinc-900/40 border border-zinc-800/80 px-5 py-2.5 rounded-xl">
+              <div className="text-3xl md:text-5xl font-mono leading-none tracking-tighter text-white font-bold tabular-nums">
+                {formattedTime}
+              </div>
+              <div className="flex items-center justify-center md:justify-end mt-2 gap-2">
+                <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wide">
+                  {formattedDay} • {formattedDate}
+                </span>
+                <div className="w-2 h-2 bg-neon rounded-full animate-pulse"></div>
+                <span className="text-[10px] uppercase font-bold tracking-wider text-zinc-500">
+                  ACTIVE
+                </span>
+              </div>
             </div>
           </div>
         </div>
@@ -463,6 +483,9 @@ export default function App() {
             </button>
           </div>
         )}
+
+        {/* Real-time Voice & Sound Tester Panel */}
+        <VoiceTester />
 
         {/* Live Active Announcement Bar */}
         {activeAnnouncement && (

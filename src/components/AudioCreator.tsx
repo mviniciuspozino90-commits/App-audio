@@ -103,11 +103,32 @@ const PRESET_ANNOUNCEMENTS_DATABASE = [
     duration: 11
   },
   {
+    id: "db_fechamento_10",
+    name: "Aviso: Fechamento (10 min)",
+    text: "Atenção senhores alunos! Restam apenas 10 minutos para o fechamento da nossa unidade de hoje. Solicitamos que comecem a finalizar suas séries e organizem seus pertences. Agradecemos a cooperação!",
+    category: "Funcionamento",
+    duration: 11
+  },
+  {
+    id: "db_fechamento_30",
+    name: "Aviso: Fechamento (30 min)",
+    text: "Atenção alunos! Restam 30 minutos para o encerramento das nossas atividades de hoje. Aproveitem para concluir suas séries de treino com tranquilidade. Desejamos a todos um ótimo descanso!",
+    category: "Funcionamento",
+    duration: 11
+  },
+  {
     id: "db_fechamento_5",
     name: "Aviso: Fechamento (5 min)",
     text: "Atenção alunos, encerraremos nossas atividades em 5 minutos. Desejamos a todos um ótimo descanso e uma excelente noite. Esperamos vocês amanhã para mais um treino incrível!",
     category: "Funcionamento",
     duration: 12
+  },
+  {
+    id: "db_guardar_pesos",
+    name: "Aviso: Guardar os Pesos",
+    text: "Atenção atletas! Por gentileza, ao terminar o uso dos equipamentos, guardem as anilhas, halteres e colchonetes nos locais adequados. Vamos juntos colaborar para manter o nosso espaço organizado para todos. Obrigado!",
+    category: "Organização",
+    duration: 11
   },
   {
     id: "db_shake",
@@ -152,30 +173,12 @@ export interface VoiceProfile {
 export const VOICE_PROFILES: VoiceProfile[] = [
   {
     id: 'ana_standard',
-    name: 'Ana (Feminina Padrão)',
+    name: 'Ana (Feminina Enérgica)',
     gender: 'F',
-    pitch: 1.1,
-    rate: 1.0,
-    description: 'Voz feminina clara, ideal para avisos gerais e comunicados do dia a dia.',
+    pitch: 1.15,
+    rate: 1.08,
+    description: 'Voz feminina natural e enérgica, ideal para motivar e dar avisos na academia.',
     avatar: '👩'
-  },
-  {
-    id: 'camila_promo',
-    name: 'Camila (Feminina Rápida)',
-    gender: 'F',
-    pitch: 1.25,
-    rate: 1.15,
-    description: 'Voz feminina enérgica e animada, perfeita para anúncios promocionais e eventos.',
-    avatar: '⚡'
-  },
-  {
-    id: 'juliana_soft',
-    name: 'Juliana (Feminina Suave)',
-    gender: 'F',
-    pitch: 0.95,
-    rate: 0.85,
-    description: 'Voz feminina pausada e gentil, excelente para dicas de saúde ou relaxamento.',
-    avatar: '🌸'
   },
   {
     id: 'daniel_standard',
@@ -185,42 +188,6 @@ export const VOICE_PROFILES: VoiceProfile[] = [
     rate: 1.0,
     description: 'Voz masculina tradicional, clara e direta para qualquer tipo de anúncio.',
     avatar: '👨'
-  },
-  {
-    id: 'ricardo_heavy',
-    name: 'Ricardo (Masculino Forte)',
-    gender: 'M',
-    pitch: 0.8,
-    rate: 1.05,
-    description: 'Voz masculina grave e enérgica, ideal para chamadas de Spinning ou Crossfit.',
-    avatar: '🔥'
-  },
-  {
-    id: 'bruno_deep',
-    name: 'Bruno (Grave e Formal)',
-    gender: 'M',
-    pitch: 0.7,
-    rate: 0.9,
-    description: 'Voz masculina profunda e solene, ótima para comunicados importantes de funcionamento.',
-    avatar: '💪'
-  },
-  {
-    id: 'cyborg_fx',
-    name: 'Cyborg 9000 (Robótica)',
-    gender: 'E',
-    pitch: 0.5,
-    rate: 1.2,
-    description: 'Voz robótica sci-fi com forte distorção mecânica. Super marcante para treino!',
-    avatar: '🤖'
-  },
-  {
-    id: 'helium_fx',
-    name: 'Voz Divertida (Aguda)',
-    gender: 'E',
-    pitch: 1.8,
-    rate: 0.85,
-    description: 'Voz super aguda para avisos descontraídos ou momentos divertidos na academia.',
-    avatar: '🎈'
   }
 ];
 
@@ -336,6 +303,7 @@ interface AudioCreatorProps {
 
 export function AudioCreator({ audios, onAudioCreated, onAudioDeleted }: AudioCreatorProps) {
   const [activeTab, setActiveTab] = useState<'tts' | 'record' | 'upload' | 'library'>('tts');
+  const [isIframe, setIsIframe] = useState(false);
 
   // Common State
   const [title, setTitle] = useState('');
@@ -344,13 +312,12 @@ export function AudioCreator({ audios, onAudioCreated, onAudioDeleted }: AudioCr
 
   // Text-To-Speech State
   const [ttsText, setTtsText] = useState('');
-  const [ttsRate, setTtsRate] = useState(1.0); // Speed
-  const [ttsPitch, setTtsPitch] = useState(1.0);
+  const [ttsRate, setTtsRate] = useState(1.08); // Speed
+  const [ttsPitch, setTtsPitch] = useState(1.15);
   const [ttsVoice, setTtsVoice] = useState<string>('');
   const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [isSpeakingTts, setIsSpeakingTts] = useState(false);
   const [selectedProfileId, setSelectedProfileId] = useState<string>('ana_standard');
-  const [voiceGenderFilter, setVoiceGenderFilter] = useState<'all' | 'F' | 'M'>('all');
 
   // Recorder State
   const [isRecording, setIsRecording] = useState(false);
@@ -378,6 +345,10 @@ export function AudioCreator({ audios, onAudioCreated, onAudioDeleted }: AudioCr
 
   // Load available speech synthesis voices
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setIsIframe(window.self !== window.top);
+    }
+
     const updateVoices = () => {
       if (typeof window !== 'undefined' && window.speechSynthesis) {
         const voices = window.speechSynthesis.getVoices();
@@ -413,8 +384,6 @@ export function AudioCreator({ audios, onAudioCreated, onAudioDeleted }: AudioCr
       const bestVoice = availableVoices.find(v => v.lang.startsWith('pt') && getVoiceGender(v.name) === profile.gender);
       if (bestVoice) {
         setTtsVoice(bestVoice.name);
-        // Sync the gender filter with the selected profile's gender
-        setVoiceGenderFilter(profile.gender);
       } else {
         // Fallback to any Portuguese voice
         const ptVoice = availableVoices.find(v => v.lang.startsWith('pt'));
@@ -974,13 +943,22 @@ export function AudioCreator({ audios, onAudioCreated, onAudioDeleted }: AudioCr
               {/* Text To Speech Tab Content */}
               {activeTab === 'tts' && (
                 <div className="space-y-4.5 animate-fade-in">
+                  {isIframe && (
+                    <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 text-zinc-300 text-xs leading-relaxed flex gap-2.5">
+                      <span className="text-amber-400 text-lg">💡</span>
+                      <div>
+                        <p className="font-extrabold text-amber-400 uppercase tracking-wider text-[10px] mb-0.5">Dica de Áudio e Navegador</p>
+                        O sintetizador de voz (TTS) do navegador é frequentemente bloqueado em painéis de visualização embutidos (iframe) por segurança. Se você não conseguir ouvir o teste de voz aqui, clique no botão de <span className="text-white font-bold">Abrir em nova aba</span> (ícone com seta no topo direito do painel de visualização) para que funcione perfeitamente!
+                      </div>
+                    </div>
+                  )}
                   
                   {/* Voice Profile Cards */}
                   <div className="space-y-1.5">
                     <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
-                      Selecione um Perfil de Voz (Feminino, Masculino ou Efeitos)
+                      Selecione um Perfil de Voz (Feminino ou Masculino)
                     </label>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <div className="grid grid-cols-2 gap-2">
                       {VOICE_PROFILES.map((profile) => {
                         const isSelected = selectedProfileId === profile.id;
                         return (
@@ -988,7 +966,7 @@ export function AudioCreator({ audios, onAudioCreated, onAudioDeleted }: AudioCr
                             key={profile.id}
                             type="button"
                             onClick={() => applyVoiceProfile(profile.id)}
-                            className={`p-2 rounded-xl border text-left transition-all flex flex-col justify-between h-[86px] cursor-pointer ${
+                            className={`p-2.5 rounded-xl border text-left transition-all flex flex-col justify-between h-[90px] cursor-pointer ${
                               isSelected
                                 ? 'bg-neon/10 border-neon text-white shadow-md shadow-neon/5'
                                 : 'bg-zinc-900/40 border-zinc-850 hover:border-zinc-700 text-zinc-300 hover:bg-zinc-900/85'
@@ -999,15 +977,13 @@ export function AudioCreator({ audios, onAudioCreated, onAudioDeleted }: AudioCr
                               <span className={`text-[8px] px-1.5 py-0.5 rounded font-black uppercase font-mono leading-none ${
                                 profile.gender === 'F' 
                                   ? 'bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-500/20' 
-                                  : profile.gender === 'M' 
-                                    ? 'bg-blue-500/20 text-blue-300 border border-blue-500/20' 
-                                    : 'bg-amber-500/20 text-amber-300 border border-amber-500/20'
+                                  : 'bg-blue-500/20 text-blue-300 border border-blue-500/20' 
                               }`}>
-                                {profile.gender === 'F' ? 'FEM' : profile.gender === 'M' ? 'MASC' : 'FX'}
+                                {profile.gender === 'F' ? 'FEMININA' : 'MASCULINA'}
                               </span>
                             </div>
                             <div className="mt-1 min-w-0">
-                              <p className="text-[10px] font-black uppercase truncate leading-tight text-white">{profile.name.split(' ')[0]}</p>
+                              <p className="text-[10px] font-black uppercase truncate leading-tight text-white">{profile.name}</p>
                               <p className="text-[8px] text-zinc-500 font-medium leading-normal line-clamp-2 mt-0.5">{profile.description}</p>
                             </div>
                           </button>
@@ -1075,79 +1051,7 @@ export function AudioCreator({ audios, onAudioCreated, onAudioDeleted }: AudioCr
                     </div>
                   </div>
 
-                  {/* Engine Selection and Filters */}
-                  <div className="grid grid-cols-1 md:grid-cols-12 gap-3.5 bg-zinc-900/25 p-3 rounded-xl border border-zinc-850">
-                    {/* Gender filter */}
-                    <div className="md:col-span-5 space-y-1">
-                      <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
-                        Filtrar Lista de Vozes
-                      </label>
-                      <div className="flex bg-zinc-950 p-1 rounded-lg border border-zinc-850 text-[9px] font-black tracking-wider">
-                        <button
-                          type="button"
-                          onClick={() => setVoiceGenderFilter('all')}
-                          className={`flex-1 py-1 rounded text-center transition-all ${
-                            voiceGenderFilter === 'all' ? 'bg-zinc-800 text-white font-extrabold' : 'text-zinc-500 hover:text-zinc-300'
-                          }`}
-                        >
-                          TODAS
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setVoiceGenderFilter('F')}
-                          className={`flex-1 py-1 rounded text-center transition-all flex items-center justify-center gap-1 ${
-                            voiceGenderFilter === 'F' ? 'bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-500/10 font-extrabold' : 'text-zinc-500 hover:text-zinc-300'
-                          }`}
-                        >
-                          <span>👩</span> FEMININAS
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setVoiceGenderFilter('M')}
-                          className={`flex-1 py-1 rounded text-center transition-all flex items-center justify-center gap-1 ${
-                            voiceGenderFilter === 'M' ? 'bg-blue-500/20 text-blue-300 border border-blue-500/10 font-extrabold' : 'text-zinc-500 hover:text-zinc-300'
-                          }`}
-                        >
-                          <span>👨</span> MASCULINAS
-                        </button>
-                      </div>
-                    </div>
 
-                    {/* Available engines select dropdown */}
-                    <div className="md:col-span-7 space-y-1">
-                      <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
-                        Mecanismo de Voz do Navegador
-                      </label>
-                      <select
-                        id="tts-voice-select"
-                        value={ttsVoice}
-                        onChange={(e) => {
-                          setTtsVoice(e.target.value);
-                          setSelectedProfileId(''); // Clear selected preset card since user custom selected voice
-                        }}
-                        className="w-full text-xs border border-zinc-800 rounded-lg px-2.5 py-1.5 bg-zinc-950 text-zinc-300 focus:outline-none focus:border-neon cursor-pointer font-bold h-[31px]"
-                      >
-                        {availableVoices
-                          .filter(v => {
-                            if (voiceGenderFilter === 'all') return true;
-                            const voiceGender = getVoiceGender(v.name);
-                            return voiceGender === voiceGenderFilter || voiceGender === 'U';
-                          })
-                          .map((voice, idx) => (
-                            <option key={idx} value={voice.name} className="bg-zinc-950 text-white">
-                              {getFriendlyVoiceName(voice)} ({voice.lang})
-                            </option>
-                          ))}
-                        {availableVoices.filter(v => {
-                          if (voiceGenderFilter === 'all') return true;
-                          const voiceGender = getVoiceGender(v.name);
-                          return voiceGender === voiceGenderFilter || voiceGender === 'U';
-                        }).length === 0 && (
-                          <option className="bg-zinc-950 text-white">Nenhuma voz compatível nesta categoria</option>
-                        )}
-                      </select>
-                    </div>
-                  </div>
 
                   {/* Text Input area */}
                   <div>
