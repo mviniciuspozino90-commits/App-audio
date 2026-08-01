@@ -28,7 +28,12 @@ const PRESET_TEST_PHRASES = [
   }
 ];
 
-export function VoiceTester() {
+interface VoiceTesterProps {
+  onTestSpeak?: (text: string, voiceName?: string, rate?: number, pitch?: number) => Promise<void>;
+  onTestChime?: () => Promise<void>;
+}
+
+export function VoiceTester({ onTestSpeak, onTestChime }: VoiceTesterProps) {
   const [isIframe, setIsIframe] = useState(false);
   const [isSupported, setIsSupported] = useState(true);
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
@@ -94,12 +99,22 @@ export function VoiceTester() {
     }
   }, [isSpeaking]);
 
-  const handleSpeak = () => {
+  const handleSpeak = async () => {
     if (!isSupported) return;
 
     if (isSpeaking) {
       window.speechSynthesis.cancel();
       setIsSpeaking(false);
+      return;
+    }
+
+    if (onTestSpeak) {
+      setIsSpeaking(true);
+      try {
+        await onTestSpeak(testText, selectedVoice, rate, pitch);
+      } finally {
+        setIsSpeaking(false);
+      }
       return;
     }
 
@@ -131,7 +146,11 @@ export function VoiceTester() {
   const handlePlayChime = async () => {
     if (isChimePlaying) return;
     setIsChimePlaying(true);
-    await playAlertChime();
+    if (onTestChime) {
+      await onTestChime();
+    } else {
+      await playAlertChime();
+    }
     setIsChimePlaying(false);
   };
 

@@ -219,12 +219,11 @@ export default function App() {
     });
 
     const isMusicPlayingBefore = musicPlayerRef.current ? musicPlayerRef.current.isPlaying() : false;
-    let originalVolume = musicPlayerRef.current ? musicPlayerRef.current.getVolume() : 100;
-    if (originalVolume === 0) originalVolume = 100; // Guard against 0 volume so it can fade back to an audible level
+    const configuredVol = musicPlayerRef.current ? musicPlayerRef.current.getConfiguredVolume() : 35;
 
-    // Phase 1: Duck or Pause background music
-    if (isMusicPlayingBefore && musicPlayerRef.current) {
-      await fadeMusicVolume(originalVolume, 0, fadeOutSec * 1000);
+    // Phase 1: Duck or Pause background music (Spotify, YouTube, Local)
+    if (musicPlayerRef.current) {
+      await musicPlayerRef.current.duckForAnnouncement(fadeOutSec * 1000);
     }
 
     // Phase 1.5: Play warning chime if enabled
@@ -276,7 +275,7 @@ export default function App() {
           // Play standard audio element (Recorded or uploaded Base64/Blob URL)
           const playAudio = new Audio(audio.url);
           currentAnnouncementAudioRef.current = playAudio;
-          playAudio.volume = 1.0; // full blast for announcements
+          playAudio.volume = 1.0; // full blast (100%) for announcements and vinhetas
 
           playAudio.onended = () => {
             resolve();
@@ -287,7 +286,7 @@ export default function App() {
           };
 
           playAudio.play().catch((err) => {
-            reject(new Error(`Autoplay bloqueado pelo Chrome: ${err.message}`));
+            reject(new Error(`Autoplay bloqueado pelo navegador: ${err.message}`));
           });
         }
       });
@@ -301,7 +300,7 @@ export default function App() {
         scheduleTitle,
         audioName: audio.name,
         status: 'success',
-        message: 'Anúncio reproduzido com sucesso. Música pausada/retomada.',
+        message: `Anúncio reproduzido a 100% do volume. Trilha de fundo (Spotify) restaurada para ${configuredVol}%.`,
       };
       await saveLog(successLog);
       setLogs((prev) => [successLog, ...prev]);
@@ -323,12 +322,12 @@ export default function App() {
       setActiveAnnouncement(null);
       currentAnnouncementAudioRef.current = null;
 
-      // Phase 3: Resume background music and fade back in
-      if (isMusicPlayingBefore && musicPlayerRef.current) {
-        musicPlayerRef.current.play();
-        await fadeMusicVolume(0, originalVolume, fadeOutSec * 1000);
-        if (musicPlayerRef.current) {
-          musicPlayerRef.current.setVolume(originalVolume);
+      // Phase 3: Resume background music and restore volume back to exact configured level (e.g., 35%)
+      if (musicPlayerRef.current) {
+        if (isMusicPlayingBefore) {
+          await musicPlayerRef.current.restoreFromAnnouncement(fadeOutSec * 1000);
+        } else {
+          musicPlayerRef.current.setConfiguredVolume(configuredVol);
         }
       }
     }
@@ -377,6 +376,59 @@ export default function App() {
   // For manual triggers
   const handleManualTrigger = (audioId: string, title: string, playChime: boolean = true) => {
     triggerAnnouncement(audioId, `Disparo Manual: ${title}`, 1.5, playChime);
+  };
+
+  const handleTestSpeak = async (text: string, voiceName?: string, rate: number = 1.08, pitch: number = 1.15) => {
+    const isMusicPlayingBefore = musicPlayerRef.current ? musicPlayerRef.current.isPlaying() : false;
+    const configuredVol = musicPlayerRef.current ? musicPlayerRef.current.getConfiguredVolume() : 35;
+
+    if (musicPlayerRef.current) {
+      await musicPlayerRef.current.duckForAnnouncement(1500);
+    }
+
+    try {
+      await new Promise<void>((resolve) => {
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.rate = rate;
+        utterance.pitch = pitch;
+        if (voiceName) {
+          const v = window.speechSynthesis.getVoices().find(v => v.name === voiceName);
+          if (v) utterance.voice = v;
+        }
+        utterance.onend = () => resolve();
+        utterance.onerror = () => resolve();
+        window.speechSynthesis.speak(utterance);
+      });
+    } finally {
+      if (musicPlayerRef.current) {
+        if (isMusicPlayingBefore) {
+          await musicPlayerRef.current.restoreFromAnnouncement(1500);
+        } else {
+          musicPlayerRef.current.setConfiguredVolume(configuredVol);
+        }
+      }
+    }
+  };
+
+  const handleTestChime = async () => {
+    const isMusicPlayingBefore = musicPlayerRef.current ? musicPlayerRef.current.isPlaying() : false;
+    const configuredVol = musicPlayerRef.current ? musicPlayerRef.current.getConfiguredVolume() : 35;
+
+    if (musicPlayerRef.current) {
+      await musicPlayerRef.current.duckForAnnouncement(1000);
+    }
+
+    try {
+      await playAlertChime();
+    } finally {
+      if (musicPlayerRef.current) {
+        if (isMusicPlayingBefore) {
+          await musicPlayerRef.current.restoreFromAnnouncement(1000);
+        } else {
+          musicPlayerRef.current.setConfiguredVolume(configuredVol);
+        }
+      }
+    }
   };
 
   const formattedTime = currentDateTime.toLocaleTimeString('pt-BR');
@@ -485,7 +537,7 @@ export default function App() {
         )}
 
         {/* Real-time Voice & Sound Tester Panel */}
-        <VoiceTester />
+        <VoiceTester onTestSpeak={handleTestSpeak} onTestChime={handleTestChime} />
 
         {/* Live Active Announcement Bar */}
         {activeAnnouncement && (

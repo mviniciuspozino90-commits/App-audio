@@ -12,6 +12,10 @@ export interface MusicPlayerControls {
   play: () => void;
   setVolume: (vol: number) => void;
   getVolume: () => number;
+  getConfiguredVolume: () => number;
+  setConfiguredVolume: (vol: number) => void;
+  duckForAnnouncement: (fadeOutMs?: number) => Promise<void>;
+  restoreFromAnnouncement: (fadeInMs?: number) => Promise<void>;
   isPlaying: () => boolean;
 }
 
@@ -53,8 +57,15 @@ const generateCodeChallenge = async (codeVerifier: string): Promise<string> => {
 export const MusicPlayer = forwardRef<MusicPlayerControls, MusicPlayerProps>(({ onControlsReady }, ref) => {
   const [activeTab, setActiveTab] = useState<'youtube' | 'local' | 'spotify'>('spotify'); // spotify is default active tab now
   const [isPlayingState, setIsPlayingState] = useState(false);
-  const [volume, setVolume] = useState(100); // 0 to 100
-  const [prevVolume, setPrevVolume] = useState(100);
+  
+  // Persistent user configured volume preference (defaulting to 35% if not saved, or preserved user value)
+  const initialSavedVol = parseInt(localStorage.getItem('user_music_volume') || '35', 10);
+  const configuredVolumeRef = useRef<number>(isNaN(initialSavedVol) ? 35 : initialSavedVol);
+  const [volume, setVolumeState] = useState(configuredVolumeRef.current); // 0 to 100
+  const [prevVolume, setPrevVolume] = useState(configuredVolumeRef.current || 35);
+  
+  const isDuckingRef = useRef<boolean>(false);
+  const wasPlayingBeforeDuckRef = useRef<boolean>(false);
 
   // Spotify Web SDK Integration States
   const [spotifyToken, setSpotifyToken] = useState<string | null>(localStorage.getItem('spotify_access_token'));
@@ -236,15 +247,6 @@ export const MusicPlayer = forwardRef<MusicPlayerControls, MusicPlayerProps>(({ 
 
   // Reference to track real volume for background ducking
   const currentVolumeRef = useRef<number>(100);
-
-  const toggleMute = () => {
-    if (volume > 0) {
-      setPrevVolume(volume);
-      setVolume(0);
-    } else {
-      setVolume(prevVolume > 0 ? prevVolume : 100);
-    }
-  };
 
   // Convert watch URLs of YouTube / Spotify to embed equivalents
   const resolveInputUrl = (input: string): { url: string; mode: 'stream' | 'youtube_api' | 'generic_iframe'; ytid?: string } => {
@@ -771,6 +773,62 @@ export const MusicPlayer = forwardRef<MusicPlayerControls, MusicPlayerProps>(({ 
     }
   };
 
+  const applyVolumeToActivePlayer = (vol: number) => {
+    const norm = Math.max(0, Math.min(100, vol));
+    currentVolumeRef.current = norm;
+    setVolumeState(norm);
+
+    if (activeTab === 'youtube') {
+      if (webMode === 'stream' && localAudioRef.current) {
+        localAudioRef.current.volume = norm / 100;
+      } else if (webMode === 'youtube_api' && ytPlayerRef.current && isYtReady) {
+        try {
+          ytPlayerRef.current.setVolume(norm);
+        } catch (e) {}
+      } else if (webMode === 'generic_iframe') {
+        if (isElectron && webviewRef.current) {
+          try {
+            webviewRef.current.executeJavaScript(`document.querySelectorAll("video, audio").forEach(el => el.volume = ${norm / 100})`);
+          } catch (e) {}
+        } else {
+          if (resolvedUrl.includes('youtube.com') || resolvedUrl.includes('youtu.be')) {
+            if (iframeRef.current && iframeRef.current.contentWindow) {
+              try {
+                iframeRef.current.contentWindow.postMessage(JSON.stringify({
+                  event: 'command',
+                  func: 'setVolume',
+                  args: [norm]
+                }), '*');
+              } catch (e) {}
+            }
+          }
+        }
+      }
+    } else if (activeTab === 'local' && localAudioRef.current) {
+      localAudioRef.current.volume = norm / 100;
+    } else if (activeTab === 'spotify') {
+      if (spotifyPlayerInstanceRef.current) {
+        try {
+          spotifyPlayerInstanceRef.current.setVolume(norm / 100).catch((err: any) => {
+            // Ignore transient promise rejections from Spotify SDK during fast operations
+          });
+        } catch (e) {
+          console.error('Failed to set Spotify volume in controls:', e);
+        }
+      }
+    }
+  };
+
+  const handleUserVolumeChange = (newVol: number) => {
+    configuredVolumeRef.current = newVol;
+    localStorage.setItem('user_music_volume', String(newVol));
+    if (!isDuckingRef.current) {
+      applyVolumeToActivePlayer(newVol);
+    } else {
+      setVolumeState(newVol);
+    }
+  };
+
   // Implement exposed controls for background voice announcements integration (ducking)
   const controls: MusicPlayerControls = {
     pause: () => {
@@ -781,35 +839,14 @@ export const MusicPlayer = forwardRef<MusicPlayerControls, MusicPlayerProps>(({ 
         } else if (webMode === 'youtube_api' && ytPlayerRef.current && isYtReady) {
           try {
             ytPlayerRef.current.pauseVideo();
-          } catch (e) {
-            console.error(e);
-          }
+          } catch (e) {}
         } else if (webMode === 'generic_iframe') {
           if (isElectron && webviewRef.current) {
             try {
-              webviewRef.current.setAudioMuted(true);
-              webviewRef.current.executeJavaScript('document.querySelectorAll("video, audio").forEach(el => el.pause())');
-            } catch (e) {
-              console.error('Webview pause error:', e);
-            }
+              webviewRef.current.executeJavaScript(`document.querySelectorAll("video, audio").forEach(el => el.pause())`);
+            } catch (e) {}
           } else {
-            // Check if it's YouTube, then we can use postMessage
-            if (resolvedUrl.includes('youtube.com') || resolvedUrl.includes('youtu.be')) {
-              if (iframeRef.current && iframeRef.current.contentWindow) {
-                try {
-                  iframeRef.current.contentWindow.postMessage(JSON.stringify({
-                    event: 'command',
-                    func: 'pauseVideo',
-                    args: []
-                  }), '*');
-                } catch (e) {
-                  console.error('Iframe postMessage pause error:', e);
-                }
-              }
-            } else if (resolvedUrl !== 'i9://home' && resolvedUrl !== 'about:blank') {
-              // Non-YouTube cross-origin iframe: suspend immediately to about:blank to force-silence any sound
-              setIsIframeSuspended(true);
-            }
+            setIsIframeSuspended(true);
           }
         }
       } else if (activeTab === 'local' && localAudioRef.current) {
@@ -826,39 +863,22 @@ export const MusicPlayer = forwardRef<MusicPlayerControls, MusicPlayerProps>(({ 
     },
     play: () => {
       setIsPlayingState(true);
-      setIsIframeSuspended(false);
-
       if (activeTab === 'youtube') {
         if (webMode === 'stream' && localAudioRef.current) {
           localAudioRef.current.play().catch(e => console.log(e));
         } else if (webMode === 'youtube_api' && ytPlayerRef.current && isYtReady) {
           try {
             ytPlayerRef.current.playVideo();
-          } catch (e) {
-            console.error(e);
-          }
+          } catch (e) {}
         } else if (webMode === 'generic_iframe') {
+          if (isIframeSuspended) {
+            setIsIframeSuspended(false);
+            setIframeKey(prev => prev + 1);
+          }
           if (isElectron && webviewRef.current) {
             try {
-              webviewRef.current.setAudioMuted(false);
-              webviewRef.current.executeJavaScript('document.querySelectorAll("video, audio").forEach(el => el.play())');
-            } catch (e) {
-              console.error('Webview play error:', e);
-            }
-          } else {
-            if (resolvedUrl.includes('youtube.com') || resolvedUrl.includes('youtu.be')) {
-              if (iframeRef.current && iframeRef.current.contentWindow) {
-                try {
-                  iframeRef.current.contentWindow.postMessage(JSON.stringify({
-                    event: 'command',
-                    func: 'playVideo',
-                    args: []
-                  }), '*');
-                } catch (e) {
-                  console.error('Iframe postMessage play error:', e);
-                }
-              }
-            }
+              webviewRef.current.executeJavaScript(`document.querySelectorAll("video, audio").forEach(el => el.play())`);
+            } catch (e) {}
           }
         }
       } else if (activeTab === 'local' && localTracks.length > 0) {
@@ -877,55 +897,57 @@ export const MusicPlayer = forwardRef<MusicPlayerControls, MusicPlayerProps>(({ 
         }
       }
     },
-    setVolume: (vol: number) => {
-      currentVolumeRef.current = vol;
-      setVolume(vol);
-      if (activeTab === 'youtube') {
-        if (webMode === 'stream' && localAudioRef.current) {
-          localAudioRef.current.volume = vol / 100;
-        } else if (webMode === 'youtube_api' && ytPlayerRef.current && isYtReady) {
-          try {
-            ytPlayerRef.current.setVolume(vol);
-          } catch (e) {
-            // ignore
-          }
-        } else if (webMode === 'generic_iframe') {
-          if (isElectron && webviewRef.current) {
-            try {
-              webviewRef.current.executeJavaScript(`document.querySelectorAll("video, audio").forEach(el => el.volume = ${vol / 100})`);
-            } catch (e) {
-              console.error('Webview volume error:', e);
-            }
-          } else {
-            if (resolvedUrl.includes('youtube.com') || resolvedUrl.includes('youtu.be')) {
-              if (iframeRef.current && iframeRef.current.contentWindow) {
-                try {
-                  iframeRef.current.contentWindow.postMessage(JSON.stringify({
-                    event: 'command',
-                    func: 'setVolume',
-                    args: [vol]
-                  }), '*');
-                } catch (e) {
-                  console.error('Iframe postMessage volume error:', e);
-                }
-              }
-            }
-          }
-        }
-      } else if (activeTab === 'local' && localAudioRef.current) {
-        localAudioRef.current.volume = vol / 100;
-      } else if (activeTab === 'spotify') {
-        if (spotifyPlayerInstanceRef.current) {
-          try {
-            spotifyPlayerInstanceRef.current.setVolume(vol / 100);
-          } catch (e) {
-            console.error('Failed to set Spotify volume in controls:', e);
+    setVolume: (vol: number) => handleUserVolumeChange(vol),
+    getVolume: () => currentVolumeRef.current,
+    getConfiguredVolume: () => configuredVolumeRef.current,
+    setConfiguredVolume: (vol: number) => handleUserVolumeChange(vol),
+    duckForAnnouncement: async (fadeOutMs: number = 2000): Promise<void> => {
+      isDuckingRef.current = true;
+      const isPlayingNow = controls.isPlaying();
+      wasPlayingBeforeDuckRef.current = isPlayingNow;
+
+      const startVol = configuredVolumeRef.current;
+
+      if (!isPlayingNow || fadeOutMs <= 0) {
+        applyVolumeToActivePlayer(0);
+        if (isPlayingNow) controls.pause();
+        return;
+      }
+
+      const steps = 8;
+      const intervalMs = fadeOutMs / steps;
+      for (let i = steps - 1; i >= 0; i--) {
+        const stepVol = Math.round((startVol * i) / steps);
+        applyVolumeToActivePlayer(stepVol);
+        await new Promise((r) => setTimeout(r, intervalMs));
+      }
+
+      controls.pause();
+      applyVolumeToActivePlayer(0);
+    },
+    restoreFromAnnouncement: async (fadeInMs: number = 2000): Promise<void> => {
+      const targetVol = configuredVolumeRef.current; // e.g. 35
+
+      if (wasPlayingBeforeDuckRef.current) {
+        controls.play();
+
+        if (fadeInMs <= 0) {
+          applyVolumeToActivePlayer(targetVol);
+        } else {
+          const steps = 8;
+          const intervalMs = fadeInMs / steps;
+          for (let i = 1; i <= steps; i++) {
+            const stepVol = Math.round((targetVol * i) / steps);
+            applyVolumeToActivePlayer(stepVol);
+            await new Promise((r) => setTimeout(r, intervalMs));
           }
         }
       }
-    },
-    getVolume: () => {
-      return currentVolumeRef.current;
+
+      // Always guarantee final volume is set back to targetVol (e.g. 35%)
+      applyVolumeToActivePlayer(targetVol);
+      setVolumeState(targetVol);
+      isDuckingRef.current = false;
     },
     isPlaying: () => {
       if (activeTab === 'youtube' && webMode === 'generic_iframe' && resolvedUrl !== 'i9://home' && resolvedUrl !== 'about:blank' && !isIframeSuspended) {
@@ -950,6 +972,15 @@ export const MusicPlayer = forwardRef<MusicPlayerControls, MusicPlayerProps>(({ 
       controls.pause();
     } else {
       controls.play();
+    }
+  };
+
+  const toggleMute = () => {
+    if (volume > 0) {
+      setPrevVolume(volume);
+      handleUserVolumeChange(0);
+    } else {
+      handleUserVolumeChange(prevVolume > 0 ? prevVolume : 35);
     }
   };
 
@@ -1947,7 +1978,7 @@ export const MusicPlayer = forwardRef<MusicPlayerControls, MusicPlayerProps>(({ 
             min="0"
             max="100"
             value={volume}
-            onChange={(e) => setVolume(Number(e.target.value))}
+            onChange={(e) => handleUserVolumeChange(Number(e.target.value))}
             className="w-full h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-neon"
           />
           <span className="text-xs font-mono font-bold text-zinc-400 w-8 text-right shrink-0">{volume}%</span>
