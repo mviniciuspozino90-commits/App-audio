@@ -1,14 +1,20 @@
 import { useState, useEffect, useRef } from 'react';
-import { AnnouncementAudio, Schedule, PlayLog } from './types';
+import { AnnouncementAudio, Schedule, PlayLog, AlertSoundMode } from './types';
 import { MusicPlayer, MusicPlayerControls } from './components/MusicPlayer';
 import { AudioCreator } from './components/AudioCreator';
 import { ScheduleManager } from './components/ScheduleManager';
 import { LogView } from './components/LogView';
 import { VoiceTester, VoiceTestSpeakOptions } from './components/VoiceTester';
-import { getAudios, getSchedules, getLogs, saveLog, saveAudio, saveSchedule } from './utils/db';
+import {
+  getAudios,
+  getSchedules,
+  getLogs,
+  saveLog,
+  deleteAudioFromDB,
+  deleteScheduleFromDB,
+} from './utils/db';
 import {
   DEFAULT_VOICE_PROFILE_ID,
-  buildTtsUrl,
   parseTtsUrl,
   playNaturalTts,
   getOrSynthesizeSpeechUrl,
@@ -40,95 +46,41 @@ export default function App() {
   const fadeIntervalRef = useRef<any>(null);
   const currentAnnouncementAudioRef = useRef<HTMLAudioElement | null>(null);
 
-  // Load data from DB on mount
+  // Load data from DB on mount (without pre-available system presets)
   const loadData = async () => {
     try {
-      const dbAudios = await getAudios();
-      const dbSchedules = await getSchedules();
+      let dbAudios = await getAudios();
+      let dbSchedules = await getSchedules();
       const dbLogs = await getLogs();
 
-      // If database is completely empty, prepopulate with beautiful presets
-      if (dbAudios.length === 0) {
-        // Create voice presets
-        const presets = [
-          {
-            id: 'preset_spinning',
-            name: 'Aviso: Início de Aula de Spinning',
-            text: 'Atenção alunos do spinning! Nossa aula cheia de energia começará em 5 minutos na sala principal. Preparem suas bikes e tragam suas garrafas de água!',
-            duration: 10
-          },
-          {
-            id: 'preset_halteres',
-            name: 'Aviso: Devolver Halteres',
-            text: 'Atenção marombeiros e atletas! Solicitamos a gentileza de guardar todos os halteres, anilhas e colchonetes nos suportes após o uso. Vamos manter nossa academia limpa, segura e organizada para todos!',
-            duration: 12
-          },
-          {
-            id: 'preset_hidratacao',
-            name: 'Dica: Hidratação Constante',
-            text: 'Lembrete rápido de treino: mantenha o ritmo alto mas não se esqueça de beber água! A hidratação correta previne cãibras e melhora a sua recuperação muscular. Hidrate-se!',
-            duration: 10
-          },
-          {
-            id: 'preset_fechamento',
-            name: 'Aviso: Fechamento (15 minutos)',
-            text: 'Atenção, senhores alunos. Nossa unidade encerrará as atividades em 15 minutos. Pedimos que comecem a finalizar seus treinos e organizem seus pertences. Agradecemos a presença e desejamos um ótimo descanso a todos!',
-            duration: 15
-          }
-        ];
+      // One-time purge of previously pre-populated system presets & default schedules
+      const purgeFlag = 'i9fit_purged_presets_v1';
+      if (typeof window !== 'undefined' && !localStorage.getItem(purgeFlag)) {
+        const defaultScheduleIds = new Set([
+          'sched_halteres_10',
+          'sched_spinning_18',
+          'sched_fechamento_22',
+        ]);
 
-        for (const preset of presets) {
-          const audio: AnnouncementAudio = {
-            id: preset.id,
-            name: preset.name,
-            url: buildTtsUrl({
-              text: preset.text,
-              profileId: DEFAULT_VOICE_PROFILE_ID,
-              rate: 1.0,
-            }),
-            duration: preset.duration,
-            createdAt: Date.now(),
-            type: 'preset',
-          };
-          await saveAudio(audio);
-          dbAudios.push(audio);
+        const presetAudios = dbAudios.filter(
+          (a) => a.type === 'preset' || a.id.startsWith('preset_')
+        );
+        for (const presetAudio of presetAudios) {
+          await deleteAudioFromDB(presetAudio.id);
         }
 
-        // Add some default schedules so the dashboard looks populated and functional!
-        const defaultSchedules: Schedule[] = [
-          {
-            id: 'sched_halteres_10',
-            title: 'Campanha de Organização (Manhã)',
-            audioId: 'preset_halteres',
-            time: '10:00',
-            days: [1, 2, 3, 4, 5],
-            enabled: true,
-            fadeOutTime: 2
-          },
-          {
-            id: 'sched_spinning_18',
-            title: 'Chamada Spinning das 18h30',
-            audioId: 'preset_spinning',
-            time: '18:25',
-            days: [1, 3, 5],
-            enabled: true,
-            fadeOutTime: 2
-          },
-          {
-            id: 'sched_fechamento_22',
-            title: 'Fechamento da Academia',
-            audioId: 'preset_fechamento',
-            time: '21:45',
-            days: [1, 2, 3, 4, 5],
-            enabled: true,
-            fadeOutTime: 2
-          }
-        ];
-
-        for (const sched of defaultSchedules) {
-          await saveSchedule(sched);
-          dbSchedules.push(sched);
+        const presetSchedules = dbSchedules.filter((s) =>
+          defaultScheduleIds.has(s.id)
+        );
+        for (const presetSched of presetSchedules) {
+          await deleteScheduleFromDB(presetSched.id);
         }
+
+        dbAudios = dbAudios.filter(
+          (a) => a.type !== 'preset' && !a.id.startsWith('preset_')
+        );
+        dbSchedules = dbSchedules.filter((s) => !defaultScheduleIds.has(s.id));
+        localStorage.setItem(purgeFlag, 'true');
       }
 
       setAudios(dbAudios);
@@ -198,7 +150,15 @@ export default function App() {
             lastTriggeredRef.current[schedule.id] = triggerKey;
             
             // Trigger!
-            triggerAnnouncement(schedule.audioId, schedule.title, schedule.fadeOutTime, schedule.playChime !== false);
+            const alertMode: AlertSoundMode =
+              schedule.alertMode ?? (schedule.playChime === false ? 'none' : 'chime_voice');
+            triggerAnnouncement(
+              schedule.audioId,
+              schedule.title,
+              schedule.fadeOutTime,
+              alertMode,
+              schedule.voiceProfileId
+            );
           }
         }
       }
@@ -206,7 +166,13 @@ export default function App() {
   };
 
   // Central Playing Sequence
-  const triggerAnnouncement = async (audioId: string, scheduleTitle: string, fadeOutSec: number = 2, playChime: boolean = false) => {
+  const triggerAnnouncement = async (
+    audioId: string,
+    scheduleTitle: string,
+    fadeOutSec: number = 2,
+    alertMode: AlertSoundMode = 'chime_voice',
+    voiceProfileId?: string
+  ) => {
     const audio = audios.find((a) => a.id === audioId);
     if (!audio) {
       // Audio deleted or missing
@@ -234,25 +200,48 @@ export default function App() {
 
     const isTts = audio.url.startsWith('tts://');
     const parsedTts = isTts ? parseTtsUrl(audio.url) : null;
+    const effectiveVoiceProfileId =
+      voiceProfileId || parsedTts?.profileId || DEFAULT_VOICE_PROFILE_ID;
 
-    // Pre-synthesize natural TTS in parallel with music fade-out so there is zero awkward silence
-    const preWarmPromise = parsedTts
-      ? getOrSynthesizeSpeechUrl({
+    // Pre-synthesize natural TTS and spoken alert in parallel with music fade-out
+    const preWarmPromises: Promise<unknown>[] = [];
+    if (parsedTts) {
+      preWarmPromises.push(
+        getOrSynthesizeSpeechUrl({
           text: parsedTts.text,
-          profileId: parsedTts.profileId,
+          profileId: effectiveVoiceProfileId,
         }).catch(() => null)
-      : Promise.resolve(null);
+      );
+    }
+    if (alertMode === 'chime_voice') {
+      preWarmPromises.push(
+        getOrSynthesizeSpeechUrl({
+          text: 'Atenção!',
+          profileId: effectiveVoiceProfileId,
+        }).catch(() => null)
+      );
+    } else if (alertMode === 'voice_attention') {
+      preWarmPromises.push(
+        getOrSynthesizeSpeechUrl({
+          text: 'Atenção, alunos!',
+          profileId: effectiveVoiceProfileId,
+        }).catch(() => null)
+      );
+    }
 
     // Phase 1: Duck or Pause background music (Spotify, YouTube, Local)
     const duckPromise = musicPlayerRef.current
       ? musicPlayerRef.current.duckForAnnouncement(fadeOutSec * 1000)
       : Promise.resolve();
 
-    await Promise.all([duckPromise, preWarmPromise]);
+    await Promise.all([duckPromise, ...preWarmPromises]);
 
-    // Phase 1.5: Play warning chime if enabled
-    if (playChime) {
-      await playAlertChime();
+    // Phase 1.5: Play alert sound / voice intro if enabled
+    if (alertMode !== 'none') {
+      await playAlertChime({
+        mode: alertMode,
+        voiceProfileId: effectiveVoiceProfileId,
+      });
     }
 
     // Phase 2: Play the selected audio
@@ -260,7 +249,7 @@ export default function App() {
       if (isTts && parsedTts) {
         const ctrl = playNaturalTts({
           text: parsedTts.text,
-          profileId: parsedTts.profileId,
+          profileId: effectiveVoiceProfileId,
           rate: parsedTts.rate,
           pitch: parsedTts.pitch,
           browserVoiceName: parsedTts.voice,
@@ -368,8 +357,13 @@ export default function App() {
   };
 
   // For manual triggers
-  const handleManualTrigger = (audioId: string, title: string, playChime: boolean = true) => {
-    triggerAnnouncement(audioId, `Disparo Manual: ${title}`, 1.5, playChime);
+  const handleManualTrigger = (
+    audioId: string,
+    title: string,
+    alertMode: AlertSoundMode = 'chime_voice',
+    voiceProfileId?: string
+  ) => {
+    triggerAnnouncement(audioId, `Disparo Manual: ${title}`, 1.5, alertMode, voiceProfileId);
   };
 
   const handleTestSpeak = async (options: VoiceTestSpeakOptions) => {
@@ -415,16 +409,25 @@ export default function App() {
     }
   };
 
-  const handleTestChime = async () => {
+  const handleTestChime = async (mode: AlertSoundMode, voiceProfileId: string) => {
     const isMusicPlayingBefore = musicPlayerRef.current ? musicPlayerRef.current.isPlaying() : false;
     const configuredVol = musicPlayerRef.current ? musicPlayerRef.current.getConfiguredVolume() : 35;
 
-    if (musicPlayerRef.current) {
-      await musicPlayerRef.current.duckForAnnouncement(1000);
-    }
+    const preWarmAlert =
+      mode === 'chime_voice'
+        ? getOrSynthesizeSpeechUrl({ text: 'Atenção!', profileId: voiceProfileId }).catch(() => null)
+        : mode === 'voice_attention'
+        ? getOrSynthesizeSpeechUrl({ text: 'Atenção, alunos!', profileId: voiceProfileId }).catch(() => null)
+        : Promise.resolve(null);
+
+    const duckPromise = musicPlayerRef.current
+      ? musicPlayerRef.current.duckForAnnouncement(1000)
+      : Promise.resolve();
+
+    await Promise.all([duckPromise, preWarmAlert]);
 
     try {
-      await playAlertChime();
+      await playAlertChime({ mode, voiceProfileId });
     } finally {
       if (musicPlayerRef.current) {
         if (isMusicPlayingBefore) {

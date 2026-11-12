@@ -1,7 +1,9 @@
+export type AlertSoundMode = 'chime_soft' | 'chime_voice' | 'voice_attention' | 'none';
+
 export interface AnnouncementAudio {
   id: string;
   name: string;
-  url: string; // Base64 data URL or object URL (for IndexedDB durability)
+  url: string; // Base64 data URL, tts:// URL, or object URL (for IndexedDB durability)
   duration: number; // in seconds
   createdAt: number;
   type: 'uploaded' | 'recorded' | 'preset' | 'tts';
@@ -17,6 +19,8 @@ export interface Schedule {
   fadeOutTime: number; // in seconds (for smooth music fading)
   interval?: number; // repetition interval in minutes (e.g. 20, 30, 40, 60)
   playChime?: boolean; // play brief alert sound before announcement starts
+  alertMode?: AlertSoundMode; // alert style before announcement
+  voiceProfileId?: string; // natural voice profile ID for this programmable announcement
 }
 
 export interface PlayLog {

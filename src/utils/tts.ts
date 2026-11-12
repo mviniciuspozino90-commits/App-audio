@@ -106,11 +106,9 @@ export function parseTtsUrl(url: string): ParsedTtsParams {
   const rawRate = parseFloat(params.get('rate') || '1.0');
   const rawPitch = parseFloat(params.get('pitch') || '1.0');
 
-  // Map legacy robotic defaults (e.g. rate 1.08, pitch 1.15, or empty profile) to natural Camila voice
+  // Map legacy robotic defaults without explicit profile to natural Camila female voice
   const profile = rawProfile
     ? getVoiceProfileById(rawProfile)
-    : rawVoice.toLowerCase().includes('daniel') || rawVoice.toLowerCase().includes('felipe')
-    ? getVoiceProfileById('lucas_natural')
     : getVoiceProfileById(DEFAULT_VOICE_PROFILE_ID);
 
   const normalizedRate =

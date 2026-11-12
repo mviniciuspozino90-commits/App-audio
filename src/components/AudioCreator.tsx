@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, ChangeEvent } from 'react';
 import { AnnouncementAudio } from '../types';
-import { Mic, Upload, Volume2, Plus, Trash2, Play, Pause, Save, Speech, AlertCircle, Sparkles, Database, Loader2, UserRound } from 'lucide-react';
+import { Mic, Upload, Volume2, Trash2, Play, Pause, Save, Speech, AlertCircle, Loader2, UserRound } from 'lucide-react';
 import { saveAudio, deleteAudioFromDB } from '../utils/db';
 import {
   NATURAL_VOICE_PROFILES,
@@ -12,163 +12,6 @@ import {
   getOrSynthesizeSpeechUrl,
   PlayTtsController,
 } from '../utils/tts';
-
-const PRESET_ANNOUNCEMENTS_DATABASE = [
-  {
-    id: "db_halteres",
-    name: "Aviso: Devolver Halteres",
-    text: "Atenção alunos! Por gentileza, após terminar seus exercícios, guardem os halteres, anilhas e colchonetes nos suportes adequados. Vamos cooperar para manter nossa academia limpa, segura e organizada para todos!",
-    category: "Organização",
-    duration: 12
-  },
-  {
-    id: "db_spinning",
-    name: "Início de Aula: Spinning",
-    text: "Atenção alunos do spinning! Nossa aula cheia de energia começará em 5 minutos na sala principal. Prepare sua garrafa de água e prepare-se para pedalar forte!",
-    category: "Aulas",
-    duration: 10
-  },
-  {
-    id: "db_funcional",
-    name: "Início de Aula: Treino Funcional",
-    text: "Atenção! Em 5 minutos daremos início ao circuito de Treino Funcional na área livre. Venha trabalhar força, resistência e agilidade com nosso treinador!",
-    category: "Aulas",
-    duration: 10
-  },
-  {
-    id: "db_zumba",
-    name: "Aula de Zumba e Ritmos",
-    text: "Atenção galera! Em 10 minutos começará nossa aula super animada de Zumba e Ritmos na sala de dança. Venha queimar muitas calorias com as melhores coreografias! Esperamos vocês!",
-    category: "Aulas",
-    duration: 11
-  },
-  {
-    id: "db_pilates",
-    name: "Aula de Pilates e Alongamento",
-    text: "Atenção alunos: nossa aula de Mat Pilates e Alongamento Integrado começará em 5 minutos na sala zen. Venha melhorar sua flexibilidade, postura e respiração!",
-    category: "Aulas",
-    duration: 10
-  },
-  {
-    id: "db_toalha",
-    name: "Campanha: Uso de Toalha",
-    text: "Lembrete de convivência: para maior higiene de todos, é obrigatório o uso de toalha de treino individual para cobrir e higienizar os aparelhos após o seu uso. Agradecemos a colaboração!",
-    category: "Higiene",
-    duration: 11
-  },
-  {
-    id: "db_colchonete",
-    name: "Higiene: Limpeza de Aparelhos",
-    text: "Atenção atletas: lembramos que temos álcool em spray e papel toalha distribuídos pela sala de musculação. Por favor, faça a higienização dos aparelhos e colchonetes após utilizá-los!",
-    category: "Higiene",
-    duration: 11
-  },
-  {
-    id: "db_garrafa",
-    name: "Higiene: Garrafinha Individual",
-    text: "Lembrete importante: traga sempre sua garrafinha de água individual para os treinos. Nossos bebedouros estão prontos para reabastecer sua hidratação de forma prática e higiênica!",
-    category: "Higiene",
-    duration: 11
-  },
-  {
-    id: "db_hidratacao",
-    name: "Dica de Saúde: Hidratação",
-    text: "Não se esqueça de beber água! Manter-se hidratado durante a atividade física evita fadiga muscular, previne cãibras e mantém seu rendimento no nível máximo. Hidrate-se!",
-    category: "Dica",
-    duration: 10
-  },
-  {
-    id: "db_cardio",
-    name: "Dica de Saúde: Treino de Cardio",
-    text: "Você já fez o seu cardio hoje? Incluir exercícios aeróbicos na sua rotina fortalece o coração, aumenta a queima de gordura e dá mais disposição para o seu dia a dia. Pratique!",
-    category: "Dica",
-    duration: 10
-  },
-  {
-    id: "db_alongamento",
-    name: "Aviso: Alongamento Pós-Treino",
-    text: "Treino concluído? Lembre-se de fazer um alongamento leve para relaxar a musculatura e melhorar sua flexibilidade. Sua recuperação muscular agradece!",
-    category: "Dica",
-    duration: 9
-  },
-  {
-    id: "db_celular",
-    name: "Etiqueta: Celular nos Aparelhos",
-    text: "Dica de convivência I9 Fit: evite ocupar os aparelhos e bancos enquanto mexe no celular. O treino flui melhor e todos conseguem treinar com agilidade. Vamos compartilhar o espaço de forma consciente!",
-    category: "Etiqueta",
-    duration: 12
-  },
-  {
-    id: "db_silencio",
-    name: "Etiqueta: Guardar Equipamentos",
-    text: "Treinar pesado é ótimo, mas fazer barulho excessivo ao largar as barras e anilhas pode danificar os equipamentos e incomodar os outros alunos. Controle o movimento até o final e cuide do nosso espaço!",
-    category: "Etiqueta",
-    duration: 12
-  },
-  {
-    id: "db_fechamento_15",
-    name: "Aviso: Fechamento (15 min)",
-    text: "Senhores alunos, restam apenas 15 minutos para o fechamento da nossa unidade de hoje. Solicitamos que comecem a finalizar suas séries e organizem seus pertences. Agradecemos a presença!",
-    category: "Funcionamento",
-    duration: 11
-  },
-  {
-    id: "db_fechamento_10",
-    name: "Aviso: Fechamento (10 min)",
-    text: "Atenção senhores alunos! Restam apenas 10 minutos para o fechamento da nossa unidade de hoje. Solicitamos que comecem a finalizar suas séries e organizem seus pertences. Agradecemos a cooperação!",
-    category: "Funcionamento",
-    duration: 11
-  },
-  {
-    id: "db_fechamento_30",
-    name: "Aviso: Fechamento (30 min)",
-    text: "Atenção alunos! Restam 30 minutos para o encerramento das nossas atividades de hoje. Aproveitem para concluir suas séries de treino com tranquilidade. Desejamos a todos um ótimo descanso!",
-    category: "Funcionamento",
-    duration: 11
-  },
-  {
-    id: "db_fechamento_5",
-    name: "Aviso: Fechamento (5 min)",
-    text: "Atenção alunos, encerraremos nossas atividades em 5 minutos. Desejamos a todos um ótimo descanso e uma excelente noite. Esperamos vocês amanhã para mais um treino incrível!",
-    category: "Funcionamento",
-    duration: 12
-  },
-  {
-    id: "db_guardar_pesos",
-    name: "Aviso: Guardar os Pesos",
-    text: "Atenção atletas! Por gentileza, ao terminar o uso dos equipamentos, guardem as anilhas, halteres e colchonetes nos locais adequados. Vamos juntos colaborar para manter o nosso espaço organizado para todos. Obrigado!",
-    category: "Organização",
-    duration: 11
-  },
-  {
-    id: "db_shake",
-    name: "Promoção: Shakes na Recepção",
-    text: "Procurando aquele pós-treino imediato? Passe em nossa recepção e confira as promoções especiais em shakes de Whey Protein e bebidas isotônicas. Garanta sua nutrição agora mesmo!",
-    category: "Promoção",
-    duration: 11
-  },
-  {
-    id: "db_personal",
-    name: "Promoção: Personal Trainer",
-    text: "Quer acelerar seus resultados? Nossa academia conta com uma equipe especializada de Personal Trainers para montar treinos personalizados de acordo com seus objetivos. Consulte condições na recepção!",
-    category: "Promoção",
-    duration: 12
-  },
-  {
-    id: "db_suplementos",
-    name: "Promoção: Suplementação Exclusiva",
-    text: "Atenção! Conheça nossa linha exclusiva de suplementos alimentares na recepção da academia. Temos Whey, Creatina, pré-treinos e barras de proteína de marcas líderes para maximizar seus ganhos!",
-    category: "Promoção",
-    duration: 12
-  },
-  {
-    id: "db_avaliacao",
-    name: "Aviso: Avaliação Física",
-    text: "Dica I9 Fit: para conquistar seus objetivos de forma inteligente, agende sua avaliação física periódica na recepção. Acompanhe sua evolução e melhore seus resultados!",
-    category: "Saúde",
-    duration: 10
-  }
-];
 
 export interface VoiceProfile {
   id: string;
@@ -197,7 +40,7 @@ interface AudioCreatorProps {
 }
 
 export function AudioCreator({ audios, onAudioCreated, onAudioDeleted }: AudioCreatorProps) {
-  const [activeTab, setActiveTab] = useState<'tts' | 'record' | 'upload' | 'library'>('tts');
+  const [activeTab, setActiveTab] = useState<'tts' | 'record' | 'upload'>('tts');
 
   // Common State
   const [title, setTitle] = useState('');
@@ -494,40 +337,6 @@ export function AudioCreator({ audios, onAudioCreated, onAudioDeleted }: AudioCr
     }
   };
 
-  // Create standard system preset audios if there are none
-  const handleLoadSystemPresets = async () => {
-    setIsSaving(true);
-    try {
-      for (const preset of PRESET_ANNOUNCEMENTS_DATABASE) {
-        const id = 'preset_' + Math.random().toString(36).substr(2, 9);
-        const audio: AnnouncementAudio = {
-          id,
-          name: preset.name,
-          url: buildTtsUrl({
-            text: preset.text,
-            profileId: selectedProfileId || DEFAULT_VOICE_PROFILE_ID,
-            rate: ttsRate,
-          }),
-          duration: preset.duration,
-          createdAt: Date.now(),
-          type: 'preset',
-        };
-        await saveAudio(audio);
-      }
-      onAudioCreated();
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const formatDuration = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
-
   const stopAllPreviews = () => {
     if (activeTtsControllerRef.current) {
       activeTtsControllerRef.current.stop();
@@ -539,60 +348,6 @@ export function AudioCreator({ audios, onAudioCreated, onAudioDeleted }: AudioCr
     }
     setPlayingAudioId(null);
     setLoadingAudioId(null);
-  };
-
-  const handlePlayLibraryTts = async (text: string, id: string) => {
-    if (playingAudioId === id || loadingAudioId === id) {
-      stopAllPreviews();
-      return;
-    }
-
-    stopAllPreviews();
-    const ctrl = playNaturalTts({
-      text,
-      profileId: selectedProfileId || DEFAULT_VOICE_PROFILE_ID,
-      rate: ttsRate,
-      onLoadingChange: (loading) => setLoadingAudioId(loading ? id : null),
-      onStart: () => setPlayingAudioId(id),
-    });
-    activeTtsControllerRef.current = ctrl;
-
-    try {
-      await ctrl.promise;
-    } catch (e) {
-      console.error('Erro ao reproduzir prévia da biblioteca:', e);
-    } finally {
-      activeTtsControllerRef.current = null;
-      setLoadingAudioId(null);
-      setPlayingAudioId(null);
-    }
-  };
-
-  const handleImportLibraryItem = async (item: { name: string, text: string, duration: number }) => {
-    setIsSaving(true);
-    try {
-      const id = 'preset_' + Math.random().toString(36).substr(2, 9);
-      const profileId = selectedProfileId || DEFAULT_VOICE_PROFILE_ID;
-      const audio: AnnouncementAudio = {
-        id,
-        name: item.name,
-        url: buildTtsUrl({
-          text: item.text,
-          profileId,
-          rate: ttsRate,
-        }),
-        duration: item.duration,
-        createdAt: Date.now(),
-        type: 'preset',
-      };
-      await saveAudio(audio);
-      getOrSynthesizeSpeechUrl({ text: item.text, profileId }).catch(() => {});
-      onAudioCreated();
-    } catch (err) {
-      console.error('Erro ao importar item:', err);
-    } finally {
-      setIsSaving(false);
-    }
   };
 
   const playAudioPreview = async (audio: AnnouncementAudio) => {
@@ -668,17 +423,6 @@ export function AudioCreator({ audios, onAudioCreated, onAudioDeleted }: AudioCr
             <Mic className="w-5 h-5 text-neon" />
             CRIAR NOVO ANÚNCIO
           </h2>
-          {audios.length === 0 && (
-            <button
-              id="load-presets-btn"
-              onClick={handleLoadSystemPresets}
-              disabled={isSaving}
-              className="text-[10px] uppercase font-bold tracking-wider text-black bg-neon hover:bg-neon-hover px-2 py-1 rounded transition-all flex items-center gap-1"
-            >
-              <Sparkles className="w-3 h-3" />
-              MODELOS
-            </button>
-          )}
         </div>
 
         {/* Tabs */}
@@ -686,7 +430,7 @@ export function AudioCreator({ audios, onAudioCreated, onAudioDeleted }: AudioCr
           <button
             id="tab-tts"
             onClick={() => setActiveTab('tts')}
-            className={`flex-1 min-w-[80px] py-2 rounded-lg flex items-center justify-center gap-1.5 transition-all ${
+            className={`flex-1 min-w-[80px] py-2 rounded-lg flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
               activeTab === 'tts' ? 'bg-neon text-black font-black uppercase italic shadow-sm' : 'text-zinc-400 hover:text-white'
             }`}
           >
@@ -696,7 +440,7 @@ export function AudioCreator({ audios, onAudioCreated, onAudioDeleted }: AudioCr
           <button
             id="tab-record"
             onClick={() => setActiveTab('record')}
-            className={`flex-1 min-w-[80px] py-2 rounded-lg flex items-center justify-center gap-1.5 transition-all ${
+            className={`flex-1 min-w-[80px] py-2 rounded-lg flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
               activeTab === 'record' ? 'bg-neon text-black font-black uppercase italic shadow-sm' : 'text-zinc-400 hover:text-white'
             }`}
           >
@@ -706,102 +450,17 @@ export function AudioCreator({ audios, onAudioCreated, onAudioDeleted }: AudioCr
           <button
             id="tab-upload"
             onClick={() => setActiveTab('upload')}
-            className={`flex-1 min-w-[80px] py-2 rounded-lg flex items-center justify-center gap-1.5 transition-all ${
+            className={`flex-1 min-w-[80px] py-2 rounded-lg flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
               activeTab === 'upload' ? 'bg-neon text-black font-black uppercase italic shadow-sm' : 'text-zinc-400 hover:text-white'
             }`}
           >
             <Upload className="w-3.5 h-3.5 shrink-0" />
             ENVIAR
           </button>
-          <button
-            id="tab-library"
-            onClick={() => setActiveTab('library')}
-            className={`flex-1 min-w-[80px] py-2 rounded-lg flex items-center justify-center gap-1.5 transition-all ${
-              activeTab === 'library' ? 'bg-neon text-black font-black uppercase italic shadow-sm' : 'text-zinc-400 hover:text-white'
-            }`}
-          >
-            <Database className="w-3.5 h-3.5 shrink-0 text-amber-500" />
-            BASE DE ANÚNCIOS
-          </button>
         </div>
 
-        {/* Inputs / Library Form */}
-        {activeTab === 'library' ? (
-          <div className="space-y-4 animate-fade-in">
-            <div className="bg-zinc-950 p-4 rounded-xl border border-zinc-850 text-xs text-zinc-400 font-medium leading-relaxed">
-              <span className="text-neon font-black block uppercase mb-1 tracking-wide flex items-center gap-1.5">
-                <Database className="w-4 h-4 text-amber-500 animate-pulse" />
-                BASE DE ANÚNCIOS DA ACADEMIA (MODELOS PROFISSIONAIS)
-              </span>
-              Selecione um anúncio pré-configurado do banco de dados oficial. Você pode escutar uma simulação de áudio antes de importar para a lista ativa do seu agendador.
-            </div>
-
-            <div className="space-y-3 max-h-[380px] overflow-y-auto custom-scrollbar pr-1 grid grid-cols-1 md:grid-cols-2 gap-3">
-              {PRESET_ANNOUNCEMENTS_DATABASE.map((item) => {
-                const isPlaying = playingAudioId === item.id;
-                const isAlreadyImported = audios.some(a => a.name === item.name);
-                return (
-                  <div
-                    key={item.id}
-                    className="p-3.5 rounded-xl bg-zinc-900/40 hover:bg-zinc-900/80 border border-zinc-850 hover:border-zinc-700 transition-all flex flex-col justify-between space-y-3"
-                  >
-                    <div>
-                      <div className="flex items-start justify-between gap-2 mb-1.5">
-                        <span className="font-bold text-white text-xs block tracking-tight leading-tight">{item.name}</span>
-                        <span className="text-[9px] font-mono font-black uppercase tracking-wider text-black bg-neon px-1.5 py-0.5 rounded shrink-0">
-                          {item.category}
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-zinc-400 italic bg-zinc-950/70 p-2.5 rounded-lg border border-zinc-900 leading-relaxed font-medium">
-                        "{item.text}"
-                      </p>
-                    </div>
-                    <div className="flex items-center justify-between gap-3 pt-1 border-t border-zinc-900">
-                      <span className="text-[10px] text-zinc-500 font-mono">
-                        Duração est.: {item.duration}s
-                      </span>
-                      <div className="flex items-center gap-1.5">
-                        {/* Test Button */}
-                        <button
-                          onClick={() => handlePlayLibraryTts(item.text, item.id)}
-                          className={`px-2.5 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 transition-all border cursor-pointer ${
-                            isPlaying || loadingAudioId === item.id
-                              ? 'bg-red-600 border-red-700 text-white'
-                              : 'bg-zinc-950 border-zinc-800 text-zinc-300 hover:border-zinc-600 hover:text-white'
-                          }`}
-                        >
-                          {loadingAudioId === item.id ? (
-                            <Loader2 className="w-3 h-3 animate-spin" />
-                          ) : isPlaying ? (
-                            <Pause className="w-3 h-3 fill-current" />
-                          ) : (
-                            <Play className="w-3 h-3 fill-current" />
-                          )}
-                          {loadingAudioId === item.id ? 'Gerando...' : isPlaying ? 'Parar' : 'Testar'}
-                        </button>
-
-                        {/* Import Button */}
-                        <button
-                          onClick={() => handleImportLibraryItem(item)}
-                          disabled={isAlreadyImported || isSaving}
-                          className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider italic flex items-center gap-1 transition-all cursor-pointer ${
-                            isAlreadyImported
-                              ? 'bg-zinc-850 text-zinc-500 cursor-not-allowed border border-zinc-800/40'
-                              : 'bg-neon hover:bg-neon-hover text-black shadow-md'
-                          }`}
-                        >
-                          <Plus className="w-3 h-3 stroke-[3px]" />
-                          {isAlreadyImported ? 'Importado' : 'Importar'}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        ) : (
-          <>
+        {/* Form Content */}
+        <>
             <div className="space-y-4">
               <div>
                 <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1">Título do Anúncio</label>
@@ -1030,7 +689,6 @@ export function AudioCreator({ audios, onAudioCreated, onAudioDeleted }: AudioCr
               </button>
             </div>
           </>
-        )}
       </div>
 
       {/* Lista de Anúncios Cadastrados */}
@@ -1109,7 +767,7 @@ export function AudioCreator({ audios, onAudioCreated, onAudioDeleted }: AudioCr
           <div className="text-center py-6 text-zinc-500 border border-dashed border-zinc-800 rounded-xl bg-zinc-900/10">
             <AlertCircle className="w-5 h-5 opacity-45 mx-auto mb-1.5 text-neon" />
             <p className="text-xs font-bold text-zinc-400 uppercase tracking-wide">Nenhum anúncio criado ainda</p>
-            <p className="text-[10px] text-zinc-500 mt-1 uppercase font-mono">Utilize o formulário acima para criar ou carregar modelos</p>
+            <p className="text-[10px] text-zinc-500 mt-1 uppercase font-mono">Utilize o formulário acima para criar ou gravar seus anúncios</p>
           </div>
         )}
       </div>

@@ -4,6 +4,7 @@ import {
   CheckCircle2, Loader2, UserRound
 } from 'lucide-react';
 import { playAlertChime } from '../utils/chime';
+import { AlertSoundMode } from '../types';
 import {
   NATURAL_VOICE_PROFILES,
   DEFAULT_VOICE_PROFILE_ID,
@@ -48,11 +49,12 @@ export interface VoiceTestSpeakOptions {
 
 interface VoiceTesterProps {
   onTestSpeak?: (options: VoiceTestSpeakOptions) => Promise<void>;
-  onTestChime?: () => Promise<void>;
+  onTestChime?: (mode: AlertSoundMode, voiceProfileId: string) => Promise<void>;
 }
 
 export function VoiceTester({ onTestSpeak, onTestChime }: VoiceTesterProps) {
   const [selectedProfileId, setSelectedProfileId] = useState<string>(DEFAULT_VOICE_PROFILE_ID);
+  const [alertMode, setAlertMode] = useState<AlertSoundMode>('chime_voice');
   const [browserVoices, setBrowserVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [selectedBrowserVoice, setSelectedBrowserVoice] = useState<string>('');
   const [useBrowserFallback, setUseBrowserFallback] = useState<boolean>(false);
@@ -173,9 +175,9 @@ export function VoiceTester({ onTestSpeak, onTestChime }: VoiceTesterProps) {
     setIsChimePlaying(true);
     try {
       if (onTestChime) {
-        await onTestChime();
+        await onTestChime(alertMode, selectedProfileId);
       } else {
-        await playAlertChime();
+        await playAlertChime({ mode: alertMode, voiceProfileId: selectedProfileId });
       }
     } finally {
       setIsChimePlaying(false);
@@ -434,16 +436,28 @@ export function VoiceTester({ onTestSpeak, onTestChime }: VoiceTesterProps) {
                 )}
               </button>
 
-              {/* Warning Chime Button */}
-              <button
-                type="button"
-                onClick={handlePlayChime}
-                disabled={isChimePlaying}
-                className="w-full bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 text-zinc-300 hover:text-white py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-1.5 transition-all cursor-pointer"
-              >
-                <Bell className={`w-3.5 h-3.5 ${isChimePlaying ? 'animate-bounce text-neon' : ''}`} />
-                Testar Sinal (BIP)
-              </button>
+              {/* Alert Sound Mode selector + Trigger Button */}
+              <div className="space-y-1.5">
+                <select
+                  value={alertMode}
+                  onChange={(e) => setAlertMode(e.target.value as AlertSoundMode)}
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-2 py-1 text-[10px] font-bold text-zinc-300 focus:outline-none focus:border-neon cursor-pointer"
+                  title="Tipo de Alerta Sonoro"
+                >
+                  <option value="chime_voice">Alerta: Sinal + Voz ("Atenção!")</option>
+                  <option value="voice_attention">Alerta: Voz ("Atenção, alunos!")</option>
+                  <option value="chime_soft">Alerta: Sinal Musical Suave</option>
+                </select>
+                <button
+                  type="button"
+                  onClick={handlePlayChime}
+                  disabled={isChimePlaying}
+                  className="w-full bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 text-zinc-300 hover:text-white py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                >
+                  <Bell className={`w-3.5 h-3.5 ${isChimePlaying ? 'animate-bounce text-neon' : ''}`} />
+                  {isChimePlaying ? 'Tocando Alerta...' : 'Testar Alerta Sonoro'}
+                </button>
+              </div>
             </div>
           </div>
         </div>
