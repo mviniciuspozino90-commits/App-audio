@@ -1,7 +1,17 @@
 import { useState, useEffect, useRef, ChangeEvent } from 'react';
 import { AnnouncementAudio } from '../types';
-import { Mic, Upload, Volume2, Plus, Trash2, Play, Pause, Save, Speech, AlertCircle, Sparkles, Database } from 'lucide-react';
+import { Mic, Upload, Volume2, Plus, Trash2, Play, Pause, Save, Speech, AlertCircle, Sparkles, Database, Loader2, UserRound } from 'lucide-react';
 import { saveAudio, deleteAudioFromDB } from '../utils/db';
+import {
+  NATURAL_VOICE_PROFILES,
+  DEFAULT_VOICE_PROFILE_ID,
+  getVoiceProfileById,
+  parseTtsUrl,
+  buildTtsUrl,
+  playNaturalTts,
+  getOrSynthesizeSpeechUrl,
+  PlayTtsController,
+} from '../utils/tts';
 
 const PRESET_ANNOUNCEMENTS_DATABASE = [
   {
@@ -163,137 +173,22 @@ const PRESET_ANNOUNCEMENTS_DATABASE = [
 export interface VoiceProfile {
   id: string;
   name: string;
-  gender: 'F' | 'M' | 'E'; // Female, Male, Special/Effect
+  gender: 'F' | 'M' | 'E';
   pitch: number;
   rate: number;
   description: string;
   avatar: string;
 }
 
-export const VOICE_PROFILES: VoiceProfile[] = [
-  {
-    id: 'ana_standard',
-    name: 'Ana (Feminina Enérgica)',
-    gender: 'F',
-    pitch: 1.15,
-    rate: 1.08,
-    description: 'Voz feminina natural e enérgica, ideal para motivar e dar avisos na academia.',
-    avatar: '👩'
-  },
-  {
-    id: 'daniel_standard',
-    name: 'Daniel (Masculino Padrão)',
-    gender: 'M',
-    pitch: 0.95,
-    rate: 1.0,
-    description: 'Voz masculina tradicional, clara e direta para qualquer tipo de anúncio.',
-    avatar: '👨'
-  }
-];
-
-export function getVoiceGender(voiceName: string): 'F' | 'M' | 'U' {
-  const name = voiceName.toLowerCase();
-  if (
-    name.includes('maria') || 
-    name.includes('ana') || 
-    name.includes('luciana') || 
-    name.includes('joana') || 
-    name.includes('gabriela') || 
-    name.includes('helena') || 
-    name.includes('amalia') || 
-    name.includes('amália') || 
-    name.includes('zira') || 
-    name.includes('yasmin') || 
-    name.includes('sara') || 
-    name.includes('cristina') || 
-    name.includes('vitoria') || 
-    name.includes('vitória') || 
-    name.includes('claudia') || 
-    name.includes('cláudia') || 
-    name.includes('marta') || 
-    name.includes('google português') || 
-    name.includes('google português do brasil') ||
-    name.includes('female') ||
-    name.includes('woman') ||
-    name.includes('girl') ||
-    name.includes('lucia') ||
-    name.includes('lúcia') ||
-    name.includes('siri female') ||
-    name.includes('siri 1') ||
-    name.includes('samantha') ||
-    name.includes('karen') ||
-    name.includes('moira') ||
-    name.includes('tessa') ||
-    name.includes('veena') ||
-    name.includes('fiona')
-  ) {
-    return 'F';
-  }
-  if (
-    name.includes('daniel') || 
-    name.includes('felipe') || 
-    name.includes('carlos') || 
-    name.includes('filipe') || 
-    name.includes('ricardo') || 
-    name.includes('joão') || 
-    name.includes('joao') || 
-    name.includes('antonio') || 
-    name.includes('antônio') || 
-    name.includes('gustavo') || 
-    name.includes('pedro') || 
-    name.includes('thiago') || 
-    name.includes('tiago') || 
-    name.includes('marcos') || 
-    name.includes('siri male') ||
-    name.includes('male') ||
-    name.includes('man') ||
-    name.includes('boy') ||
-    name.includes('guy') ||
-    name.includes('david') ||
-    name.includes('george') ||
-    name.includes('ravi')
-  ) {
-    return 'M';
-  }
-  if (name.includes('portuguese') || name.includes('português') || name.includes('pt-br') || name.includes('pt-pt')) {
-    return 'F';
-  }
-  return 'U';
-}
-
-export function getFriendlyVoiceName(voice: SpeechSynthesisVoice): string {
-  const name = voice.name;
-  const nameLower = name.toLowerCase();
-  
-  if (nameLower.includes('maria')) return 'Maria (Feminina Padrão)';
-  if (nameLower.includes('daniel')) return 'Daniel (Masculina Padrão)';
-  if (nameLower.includes('gabriela') || nameLower.includes('google português do brasil') || nameLower.includes('google português')) {
-    return 'Gabriela (Feminina Google)';
-  }
-  if (nameLower.includes('luciana')) return 'Luciana (Feminina macOS)';
-  if (nameLower.includes('felipe')) return 'Felipe (Masculina macOS)';
-  if (nameLower.includes('joana')) return 'Joana (Feminina macOS)';
-  if (nameLower.includes('filipe')) return 'Filipe (Masculina macOS)';
-  if (nameLower.includes('helena')) return 'Helena (Feminina)';
-  if (nameLower.includes('sara')) return 'Sara (Feminina)';
-  if (nameLower.includes('amalia') || nameLower.includes('amália')) return 'Amália (Feminina - Portugal)';
-  
-  let cleanName = name
-    .replace('Microsoft', '')
-    .replace('Desktop', '')
-    .replace('TTS', '')
-    .replace('Natural', '')
-    .replace('Voice', '')
-    .trim();
-    
-  const gender = getVoiceGender(name);
-  if (gender === 'F') {
-    return `${cleanName} (Voz Feminina)`;
-  } else if (gender === 'M') {
-    return `${cleanName} (Voz Masculina)`;
-  }
-  return cleanName;
-}
+export const VOICE_PROFILES: VoiceProfile[] = NATURAL_VOICE_PROFILES.map((p) => ({
+  id: p.id,
+  name: p.name,
+  gender: p.gender,
+  pitch: p.pitch,
+  rate: p.rate,
+  description: p.description,
+  avatar: p.gender === 'F' ? '👩' : '👨',
+}));
 
 interface AudioCreatorProps {
   audios: AnnouncementAudio[];
@@ -303,7 +198,6 @@ interface AudioCreatorProps {
 
 export function AudioCreator({ audios, onAudioCreated, onAudioDeleted }: AudioCreatorProps) {
   const [activeTab, setActiveTab] = useState<'tts' | 'record' | 'upload' | 'library'>('tts');
-  const [isIframe, setIsIframe] = useState(false);
 
   // Common State
   const [title, setTitle] = useState('');
@@ -312,12 +206,11 @@ export function AudioCreator({ audios, onAudioCreated, onAudioDeleted }: AudioCr
 
   // Text-To-Speech State
   const [ttsText, setTtsText] = useState('');
-  const [ttsRate, setTtsRate] = useState(1.08); // Speed
-  const [ttsPitch, setTtsPitch] = useState(1.15);
-  const [ttsVoice, setTtsVoice] = useState<string>('');
-  const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [ttsRate, setTtsRate] = useState(1.0); // Natural speed
   const [isSpeakingTts, setIsSpeakingTts] = useState(false);
-  const [selectedProfileId, setSelectedProfileId] = useState<string>('ana_standard');
+  const [isLoadingTts, setIsLoadingTts] = useState(false);
+  const [selectedProfileId, setSelectedProfileId] = useState<string>(DEFAULT_VOICE_PROFILE_ID);
+  const activeTtsControllerRef = useRef<PlayTtsController | null>(null);
 
   // Recorder State
   const [isRecording, setIsRecording] = useState(false);
@@ -339,57 +232,26 @@ export function AudioCreator({ audios, onAudioCreated, onAudioDeleted }: AudioCr
 
   // Saved Audios Preview/Delete State
   const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
+  const [loadingAudioId, setLoadingAudioId] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const deleteConfirmRef = useRef<string | null>(null);
   const currentTestAudioRef = useRef<HTMLAudioElement | null>(null);
 
-  // Load available speech synthesis voices
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      setIsIframe(window.self !== window.top);
-    }
-
-    const updateVoices = () => {
-      if (typeof window !== 'undefined' && window.speechSynthesis) {
-        const voices = window.speechSynthesis.getVoices();
-        // Filter Portuguese voices first, then everything
-        const ptVoices = voices.filter(v => v.lang.startsWith('pt'));
-        setAvailableVoices(ptVoices.length > 0 ? ptVoices : voices);
-
-        // Select default Portuguese voice if available
-        if (ptVoices.length > 0 && !ttsVoice) {
-          const femalePt = ptVoices.find(v => getVoiceGender(v.name) === 'F');
-          setTtsVoice(femalePt ? femalePt.name : ptVoices[0].name);
-        } else if (voices.length > 0 && !ttsVoice) {
-          setTtsVoice(voices[0].name);
-        }
+    return () => {
+      if (activeTtsControllerRef.current) {
+        activeTtsControllerRef.current.stop();
+      }
+      if (currentTestAudioRef.current) {
+        currentTestAudioRef.current.pause();
       }
     };
-
-    updateVoices();
-    if (typeof window !== 'undefined' && window.speechSynthesis) {
-      window.speechSynthesis.onvoiceschanged = updateVoices;
-    }
   }, []);
 
   const applyVoiceProfile = (profileId: string) => {
-    const profile = VOICE_PROFILES.find(p => p.id === profileId);
-    if (!profile) return;
-
-    setSelectedProfileId(profileId);
-    setTtsPitch(profile.pitch);
+    const profile = getVoiceProfileById(profileId);
+    setSelectedProfileId(profile.id);
     setTtsRate(profile.rate);
-
-    if (profile.gender === 'F' || profile.gender === 'M') {
-      const bestVoice = availableVoices.find(v => v.lang.startsWith('pt') && getVoiceGender(v.name) === profile.gender);
-      if (bestVoice) {
-        setTtsVoice(bestVoice.name);
-      } else {
-        // Fallback to any Portuguese voice
-        const ptVoice = availableVoices.find(v => v.lang.startsWith('pt'));
-        if (ptVoice) setTtsVoice(ptVoice.name);
-      }
-    }
   };
 
   // Recorder timer effect
@@ -417,34 +279,42 @@ export function AudioCreator({ audios, onAudioCreated, onAudioDeleted }: AudioCr
     };
   }, [isRecording]);
 
-  // Test Speak TTS
-  const handleTestTts = () => {
-    if (!ttsText) return;
+  // Test Speak TTS (Natural Neural Voice)
+  const handleTestTts = async () => {
+    if (!ttsText.trim()) return;
 
-    if (isSpeakingTts) {
-      window.speechSynthesis.cancel();
+    if (isSpeakingTts || isLoadingTts) {
+      if (activeTtsControllerRef.current) {
+        activeTtsControllerRef.current.stop();
+        activeTtsControllerRef.current = null;
+      }
       setIsSpeakingTts(false);
+      setIsLoadingTts(false);
       return;
     }
 
-    const utterance = new SpeechSynthesisUtterance(ttsText);
-    if (ttsVoice) {
-      const selectedVoice = window.speechSynthesis.getVoices().find(v => v.name === ttsVoice);
-      if (selectedVoice) utterance.voice = selectedVoice;
+    if (currentTestAudioRef.current) {
+      currentTestAudioRef.current.pause();
     }
-    utterance.rate = ttsRate;
-    utterance.pitch = ttsPitch;
 
-    utterance.onend = () => {
+    const ctrl = playNaturalTts({
+      text: ttsText,
+      profileId: selectedProfileId,
+      rate: ttsRate,
+      onLoadingChange: (loading) => setIsLoadingTts(loading),
+      onStart: () => setIsSpeakingTts(true),
+    });
+    activeTtsControllerRef.current = ctrl;
+
+    try {
+      await ctrl.promise;
+    } catch (err) {
+      console.error('Erro ao testar voz natural:', err);
+    } finally {
+      activeTtsControllerRef.current = null;
+      setIsLoadingTts(false);
       setIsSpeakingTts(false);
-    };
-
-    utterance.onerror = () => {
-      setIsSpeakingTts(false);
-    };
-
-    setIsSpeakingTts(true);
-    window.speechSynthesis.speak(utterance);
+    }
   };
 
   // Start Mic Recording
@@ -563,11 +433,19 @@ export function AudioCreator({ audios, onAudioCreated, onAudioDeleted }: AudioCr
         newAudio = {
           id,
           name: title,
-          url: `tts://${encodeURIComponent(ttsText)}?rate=${ttsRate}&pitch=${ttsPitch}&voice=${encodeURIComponent(ttsVoice)}`,
+          url: buildTtsUrl({
+            text: ttsText,
+            profileId: selectedProfileId,
+            rate: ttsRate,
+            pitch: 1.0,
+          }),
           duration: estDuration,
           createdAt: Date.now(),
           type: 'tts',
         };
+
+        // Pre-warm cache in background so scheduled playback is instant
+        getOrSynthesizeSpeechUrl({ text: ttsText, profileId: selectedProfileId }).catch(() => {});
       } else if (activeTab === 'record') {
         if (!recordedBase64) {
           setError('Por favor, grave um áudio antes de salvar.');
@@ -622,11 +500,14 @@ export function AudioCreator({ audios, onAudioCreated, onAudioDeleted }: AudioCr
     try {
       for (const preset of PRESET_ANNOUNCEMENTS_DATABASE) {
         const id = 'preset_' + Math.random().toString(36).substr(2, 9);
-        const voiceName = availableVoices.length > 0 ? availableVoices[0].name : '';
         const audio: AnnouncementAudio = {
           id,
           name: preset.name,
-          url: `tts://${encodeURIComponent(preset.text)}?rate=1&pitch=1&voice=${encodeURIComponent(voiceName)}`,
+          url: buildTtsUrl({
+            text: preset.text,
+            profileId: selectedProfileId || DEFAULT_VOICE_PROFILE_ID,
+            rate: ttsRate,
+          }),
           duration: preset.duration,
           createdAt: Date.now(),
           type: 'preset',
@@ -647,50 +528,65 @@ export function AudioCreator({ audios, onAudioCreated, onAudioDeleted }: AudioCr
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const handlePlayLibraryTts = (text: string, id: string) => {
-    if (playingAudioId === id) {
-      if (typeof window !== 'undefined' && window.speechSynthesis) {
-        window.speechSynthesis.cancel();
-      }
-      setPlayingAudioId(null);
-      return;
-    }
-    if (typeof window !== 'undefined' && window.speechSynthesis) {
-      window.speechSynthesis.cancel();
+  const stopAllPreviews = () => {
+    if (activeTtsControllerRef.current) {
+      activeTtsControllerRef.current.stop();
+      activeTtsControllerRef.current = null;
     }
     if (currentTestAudioRef.current) {
       currentTestAudioRef.current.pause();
+      currentTestAudioRef.current = null;
     }
-    const utterance = new SpeechSynthesisUtterance(text);
-    const voiceName = ttsVoice || (availableVoices.length > 0 ? availableVoices[0].name : '');
-    if (voiceName) {
-      const selectedVoice = availableVoices.find(v => v.name === voiceName);
-      if (selectedVoice) utterance.voice = selectedVoice;
+    setPlayingAudioId(null);
+    setLoadingAudioId(null);
+  };
+
+  const handlePlayLibraryTts = async (text: string, id: string) => {
+    if (playingAudioId === id || loadingAudioId === id) {
+      stopAllPreviews();
+      return;
     }
-    utterance.onend = () => {
+
+    stopAllPreviews();
+    const ctrl = playNaturalTts({
+      text,
+      profileId: selectedProfileId || DEFAULT_VOICE_PROFILE_ID,
+      rate: ttsRate,
+      onLoadingChange: (loading) => setLoadingAudioId(loading ? id : null),
+      onStart: () => setPlayingAudioId(id),
+    });
+    activeTtsControllerRef.current = ctrl;
+
+    try {
+      await ctrl.promise;
+    } catch (e) {
+      console.error('Erro ao reproduzir prévia da biblioteca:', e);
+    } finally {
+      activeTtsControllerRef.current = null;
+      setLoadingAudioId(null);
       setPlayingAudioId(null);
-    };
-    utterance.onerror = () => {
-      setPlayingAudioId(null);
-    };
-    setPlayingAudioId(id);
-    window.speechSynthesis.speak(utterance);
+    }
   };
 
   const handleImportLibraryItem = async (item: { name: string, text: string, duration: number }) => {
     setIsSaving(true);
     try {
       const id = 'preset_' + Math.random().toString(36).substr(2, 9);
-      const voiceName = ttsVoice || (availableVoices.length > 0 ? availableVoices[0].name : '');
+      const profileId = selectedProfileId || DEFAULT_VOICE_PROFILE_ID;
       const audio: AnnouncementAudio = {
         id,
         name: item.name,
-        url: `tts://${encodeURIComponent(item.text)}?rate=1&pitch=1&voice=${encodeURIComponent(voiceName)}`,
+        url: buildTtsUrl({
+          text: item.text,
+          profileId,
+          rate: ttsRate,
+        }),
         duration: item.duration,
         createdAt: Date.now(),
         type: 'preset',
       };
       await saveAudio(audio);
+      getOrSynthesizeSpeechUrl({ text: item.text, profileId }).catch(() => {});
       onAudioCreated();
     } catch (err) {
       console.error('Erro ao importar item:', err);
@@ -699,61 +595,34 @@ export function AudioCreator({ audios, onAudioCreated, onAudioDeleted }: AudioCr
     }
   };
 
-  const playAudioPreview = (audio: AnnouncementAudio) => {
-    if (playingAudioId === audio.id) {
-      if (currentTestAudioRef.current) {
-        currentTestAudioRef.current.pause();
-      }
-      if (typeof window !== 'undefined' && window.speechSynthesis) {
-        window.speechSynthesis.cancel();
-      }
-      setPlayingAudioId(null);
+  const playAudioPreview = async (audio: AnnouncementAudio) => {
+    if (playingAudioId === audio.id || loadingAudioId === audio.id) {
+      stopAllPreviews();
       return;
     }
 
-    if (currentTestAudioRef.current) {
-      currentTestAudioRef.current.pause();
-    }
-    if (typeof window !== 'undefined' && window.speechSynthesis) {
-      window.speechSynthesis.cancel();
-    }
+    stopAllPreviews();
 
     if (audio.type === 'tts' || audio.type === 'preset') {
       try {
-        let textToSpeak = '';
-        let rate = 1;
-        let pitch = 1;
-        let voiceName = '';
-
-        if (audio.url.startsWith('tts://')) {
-          const parsedUrl = new URL(audio.url);
-          textToSpeak = decodeURIComponent(parsedUrl.pathname.replace(/^\/\//, ''));
-          rate = parseFloat(parsedUrl.searchParams.get('rate') || '1');
-          pitch = parseFloat(parsedUrl.searchParams.get('pitch') || '1');
-          voiceName = parsedUrl.searchParams.get('voice') || '';
-        } else {
-          textToSpeak = audio.url;
-        }
-
-        const utterance = new SpeechSynthesisUtterance(textToSpeak);
-        if (voiceName && typeof window !== 'undefined' && window.speechSynthesis) {
-          const selectedVoice = window.speechSynthesis.getVoices().find(v => v.name === voiceName);
-          if (selectedVoice) utterance.voice = selectedVoice;
-        }
-        utterance.rate = rate;
-        utterance.pitch = pitch;
-
-        utterance.onend = () => {
-          setPlayingAudioId(null);
-        };
-        utterance.onerror = () => {
-          setPlayingAudioId(null);
-        };
-
-        setPlayingAudioId(audio.id);
-        window.speechSynthesis.speak(utterance);
+        const parsed = parseTtsUrl(audio.url);
+        const ctrl = playNaturalTts({
+          text: parsed.text,
+          profileId: parsed.profileId,
+          rate: parsed.rate,
+          pitch: parsed.pitch,
+          browserVoiceName: parsed.voice,
+          onLoadingChange: (loading) => setLoadingAudioId(loading ? audio.id : null),
+          onStart: () => setPlayingAudioId(audio.id),
+        });
+        activeTtsControllerRef.current = ctrl;
+        await ctrl.promise;
       } catch (e) {
         console.error('Erro ao tocar TTS:', e);
+      } finally {
+        activeTtsControllerRef.current = null;
+        setLoadingAudioId(null);
+        setPlayingAudioId(null);
       }
     } else {
       const htmlAudio = new Audio(audio.url);
@@ -896,13 +765,19 @@ export function AudioCreator({ audios, onAudioCreated, onAudioDeleted }: AudioCr
                         <button
                           onClick={() => handlePlayLibraryTts(item.text, item.id)}
                           className={`px-2.5 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 transition-all border cursor-pointer ${
-                            isPlaying
-                              ? 'bg-red-600 border-red-700 text-white animate-pulse'
+                            isPlaying || loadingAudioId === item.id
+                              ? 'bg-red-600 border-red-700 text-white'
                               : 'bg-zinc-950 border-zinc-800 text-zinc-300 hover:border-zinc-600 hover:text-white'
                           }`}
                         >
-                          {isPlaying ? <Pause className="w-3 h-3 fill-current" /> : <Play className="w-3 h-3 fill-current" />}
-                          {isPlaying ? 'Parar' : 'Testar'}
+                          {loadingAudioId === item.id ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : isPlaying ? (
+                            <Pause className="w-3 h-3 fill-current" />
+                          ) : (
+                            <Play className="w-3 h-3 fill-current" />
+                          )}
+                          {loadingAudioId === item.id ? 'Gerando...' : isPlaying ? 'Parar' : 'Testar'}
                         </button>
 
                         {/* Import Button */}
@@ -943,115 +818,70 @@ export function AudioCreator({ audios, onAudioCreated, onAudioDeleted }: AudioCr
               {/* Text To Speech Tab Content */}
               {activeTab === 'tts' && (
                 <div className="space-y-4.5 animate-fade-in">
-                  {isIframe && (
-                    <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 text-zinc-300 text-xs leading-relaxed flex gap-2.5">
-                      <span className="text-amber-400 text-lg">💡</span>
-                      <div>
-                        <p className="font-extrabold text-amber-400 uppercase tracking-wider text-[10px] mb-0.5">Dica de Áudio e Navegador</p>
-                        O sintetizador de voz (TTS) do navegador é frequentemente bloqueado em painéis de visualização embutidos (iframe) por segurança. Se você não conseguir ouvir o teste de voz aqui, clique no botão de <span className="text-white font-bold">Abrir em nova aba</span> (ícone com seta no topo direito do painel de visualização) para que funcione perfeitamente!
-                      </div>
-                    </div>
-                  )}
-                  
                   {/* Voice Profile Cards */}
-                  <div className="space-y-1.5">
+                  <div className="space-y-2">
                     <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
-                      Selecione um Perfil de Voz (Feminino ou Masculino)
+                      Selecione a Locutora (Voz Humana Natural)
                     </label>
-                    <div className="grid grid-cols-2 gap-2">
-                      {VOICE_PROFILES.map((profile) => {
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {NATURAL_VOICE_PROFILES.map((profile) => {
                         const isSelected = selectedProfileId === profile.id;
                         return (
                           <button
                             key={profile.id}
                             type="button"
                             onClick={() => applyVoiceProfile(profile.id)}
-                            className={`p-2.5 rounded-xl border text-left transition-all flex flex-col justify-between h-[90px] cursor-pointer ${
+                            className={`p-2.5 rounded-xl border text-left transition-all flex flex-col justify-between gap-1 cursor-pointer ${
                               isSelected
                                 ? 'bg-neon/10 border-neon text-white shadow-md shadow-neon/5'
                                 : 'bg-zinc-900/40 border-zinc-850 hover:border-zinc-700 text-zinc-300 hover:bg-zinc-900/85'
                             }`}
                           >
-                            <div className="flex items-center justify-between w-full">
-                              <span className="text-base leading-none">{profile.avatar}</span>
-                              <span className={`text-[8px] px-1.5 py-0.5 rounded font-black uppercase font-mono leading-none ${
-                                profile.gender === 'F' 
-                                  ? 'bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-500/20' 
-                                  : 'bg-blue-500/20 text-blue-300 border border-blue-500/20' 
+                            <div className="flex items-center justify-between w-full gap-1.5">
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <UserRound className={`w-3.5 h-3.5 shrink-0 ${profile.gender === 'F' ? 'text-fuchsia-400' : 'text-sky-400'}`} />
+                                <p className="text-[10px] font-black uppercase truncate leading-tight text-white">{profile.shortName}</p>
+                              </div>
+                              <span className={`text-[8px] px-1.5 py-0.5 rounded font-black uppercase font-mono leading-none shrink-0 ${
+                                profile.gender === 'F'
+                                  ? 'bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-500/20'
+                                  : 'bg-blue-500/20 text-blue-300 border border-blue-500/20'
                               }`}>
-                                {profile.gender === 'F' ? 'FEMININA' : 'MASCULINA'}
+                                {profile.badge}
                               </span>
                             </div>
-                            <div className="mt-1 min-w-0">
-                              <p className="text-[10px] font-black uppercase truncate leading-tight text-white">{profile.name}</p>
-                              <p className="text-[8px] text-zinc-500 font-medium leading-normal line-clamp-2 mt-0.5">{profile.description}</p>
-                            </div>
+                            <p className="text-[9px] text-zinc-400 font-medium leading-snug line-clamp-2">{profile.description}</p>
                           </button>
                         );
                       })}
                     </div>
                   </div>
 
-                  {/* Sliders for Pitch and Rate */}
-                  <div className="grid grid-cols-2 gap-3 bg-zinc-950/80 p-3.5 rounded-xl border border-zinc-850">
-                    <div>
-                      <div className="flex items-center justify-between mb-1.5">
-                        <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
-                          Tom da Voz (Grave/Agudo)
-                        </label>
-                        <span className="text-[9px] font-mono font-black text-neon bg-neon/10 px-1.5 py-0.5 rounded border border-neon/10">
-                          {ttsPitch.toFixed(2)}x
-                        </span>
-                      </div>
-                      <input
-                        type="range"
-                        min="0.5"
-                        max="2.0"
-                        step="0.05"
-                        value={ttsPitch}
-                        onChange={(e) => {
-                          setTtsPitch(parseFloat(e.target.value));
-                          setSelectedProfileId(''); // Clear profile active state since user customized
-                        }}
-                        className="w-full h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-neon focus:outline-none"
-                      />
-                      <div className="flex justify-between text-[8px] text-zinc-600 font-mono mt-1 font-bold">
-                        <span>GRAVE (0.5)</span>
-                        <span>NORMAL</span>
-                        <span>AGUDO (2.0)</span>
-                      </div>
+                  {/* Speed slider preserving natural timbre */}
+                  <div className="bg-zinc-950/80 p-3.5 rounded-xl border border-zinc-850">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
+                        Ritmo da Fala (Sem distorcer o timbre)
+                      </label>
+                      <span className="text-[9px] font-mono font-black text-neon bg-neon/10 px-1.5 py-0.5 rounded border border-neon/10">
+                        {ttsRate.toFixed(2)}x
+                      </span>
                     </div>
-
-                    <div>
-                      <div className="flex items-center justify-between mb-1.5">
-                        <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
-                          Velocidade da Fala
-                        </label>
-                        <span className="text-[9px] font-mono font-black text-neon bg-neon/10 px-1.5 py-0.5 rounded border border-neon/10">
-                          {ttsRate.toFixed(2)}x
-                        </span>
-                      </div>
-                      <input
-                        type="range"
-                        min="0.5"
-                        max="2.0"
-                        step="0.05"
-                        value={ttsRate}
-                        onChange={(e) => {
-                          setTtsRate(parseFloat(e.target.value));
-                          setSelectedProfileId(''); // Clear profile active state since user customized
-                        }}
-                        className="w-full h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-neon focus:outline-none"
-                      />
-                      <div className="flex justify-between text-[8px] text-zinc-600 font-mono mt-1 font-bold">
-                        <span>LENTO (0.5)</span>
-                        <span>NORMAL</span>
-                        <span>RÁPIDO (2.0)</span>
-                      </div>
+                    <input
+                      type="range"
+                      min="0.80"
+                      max="1.25"
+                      step="0.02"
+                      value={ttsRate}
+                      onChange={(e) => setTtsRate(parseFloat(e.target.value))}
+                      className="w-full h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-neon focus:outline-none"
+                    />
+                    <div className="flex justify-between text-[8px] text-zinc-600 font-mono mt-1 font-bold">
+                      <span>CALMA (0.80x)</span>
+                      <span>NATURAL (1.00x)</span>
+                      <span>DINÂMICA (1.25x)</span>
                     </div>
                   </div>
-
-
 
                   {/* Text Input area */}
                   <div>
@@ -1079,13 +909,19 @@ export function AudioCreator({ audios, onAudioCreated, onAudioDeleted }: AudioCr
                       onClick={handleTestTts}
                       disabled={!ttsText}
                       className={`py-2 px-4 rounded-lg text-xs font-black uppercase italic flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                        isSpeakingTts
-                          ? 'bg-red-600 text-white hover:bg-red-700 shadow-md animate-pulse'
+                        isSpeakingTts || isLoadingTts
+                          ? 'bg-red-600 text-white hover:bg-red-700 shadow-md'
                           : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-200 disabled:opacity-50 border border-zinc-750'
                       }`}
                     >
-                      {isSpeakingTts ? <Pause className="w-3.5 h-3.5 fill-current" /> : <Volume2 className="w-3.5 h-3.5" />}
-                      {isSpeakingTts ? 'Parar Teste' : 'Testar Voz'}
+                      {isLoadingTts ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : isSpeakingTts ? (
+                        <Pause className="w-3.5 h-3.5 fill-current" />
+                      ) : (
+                        <Volume2 className="w-3.5 h-3.5" />
+                      )}
+                      {isLoadingTts ? 'Gerando Voz...' : isSpeakingTts ? 'Parar Teste' : 'Testar Voz Natural'}
                     </button>
                   </div>
                 </div>
@@ -1230,13 +1066,19 @@ export function AudioCreator({ audios, onAudioCreated, onAudioDeleted }: AudioCr
                     <button
                       onClick={() => playAudioPreview(audio)}
                       className={`p-2 rounded-lg border transition-all cursor-pointer ${
-                        isPlaying
+                        isPlaying || loadingAudioId === audio.id
                           ? 'bg-red-500/10 border-red-500/20 text-red-400'
                           : 'bg-zinc-950 border-zinc-850 text-neon hover:bg-zinc-900 hover:border-neon/30'
                       }`}
-                      title={isPlaying ? 'Parar Teste' : 'Testar Áudio'}
+                      title={loadingAudioId === audio.id ? 'Gerando Voz...' : isPlaying ? 'Parar Teste' : 'Testar Áudio'}
                     >
-                      {isPlaying ? <Pause className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current" />}
+                      {loadingAudioId === audio.id ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : isPlaying ? (
+                        <Pause className="w-4 h-4 fill-current" />
+                      ) : (
+                        <Play className="w-4 h-4 fill-current" />
+                      )}
                     </button>
 
                     {/* Botão de Excluir */}

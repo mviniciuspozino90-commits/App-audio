@@ -4,8 +4,15 @@ import { MusicPlayer, MusicPlayerControls } from './components/MusicPlayer';
 import { AudioCreator } from './components/AudioCreator';
 import { ScheduleManager } from './components/ScheduleManager';
 import { LogView } from './components/LogView';
-import { VoiceTester } from './components/VoiceTester';
+import { VoiceTester, VoiceTestSpeakOptions } from './components/VoiceTester';
 import { getAudios, getSchedules, getLogs, saveLog, saveAudio, saveSchedule } from './utils/db';
+import {
+  DEFAULT_VOICE_PROFILE_ID,
+  buildTtsUrl,
+  parseTtsUrl,
+  playNaturalTts,
+  getOrSynthesizeSpeechUrl,
+} from './utils/tts';
 import { 
   Clock, Info, VolumeX, Volume2, ShieldCheck, Play, HelpCircle, 
   Settings, CheckCircle2, ChevronRight, Speaker, Sparkles, Activity
@@ -74,7 +81,11 @@ export default function App() {
           const audio: AnnouncementAudio = {
             id: preset.id,
             name: preset.name,
-            url: `tts://${encodeURIComponent(preset.text)}?rate=1&pitch=1&voice=`,
+            url: buildTtsUrl({
+              text: preset.text,
+              profileId: DEFAULT_VOICE_PROFILE_ID,
+              rate: 1.0,
+            }),
             duration: preset.duration,
             createdAt: Date.now(),
             type: 'preset',
@@ -221,10 +232,23 @@ export default function App() {
     const isMusicPlayingBefore = musicPlayerRef.current ? musicPlayerRef.current.isPlaying() : false;
     const configuredVol = musicPlayerRef.current ? musicPlayerRef.current.getConfiguredVolume() : 35;
 
+    const isTts = audio.url.startsWith('tts://');
+    const parsedTts = isTts ? parseTtsUrl(audio.url) : null;
+
+    // Pre-synthesize natural TTS in parallel with music fade-out so there is zero awkward silence
+    const preWarmPromise = parsedTts
+      ? getOrSynthesizeSpeechUrl({
+          text: parsedTts.text,
+          profileId: parsedTts.profileId,
+        }).catch(() => null)
+      : Promise.resolve(null);
+
     // Phase 1: Duck or Pause background music (Spotify, YouTube, Local)
-    if (musicPlayerRef.current) {
-      await musicPlayerRef.current.duckForAnnouncement(fadeOutSec * 1000);
-    }
+    const duckPromise = musicPlayerRef.current
+      ? musicPlayerRef.current.duckForAnnouncement(fadeOutSec * 1000)
+      : Promise.resolve();
+
+    await Promise.all([duckPromise, preWarmPromise]);
 
     // Phase 1.5: Play warning chime if enabled
     if (playChime) {
@@ -233,45 +257,17 @@ export default function App() {
 
     // Phase 2: Play the selected audio
     try {
-      const playPromise = new Promise<void>((resolve, reject) => {
-        const isTts = audio.url.startsWith('tts://');
-
-        if (isTts) {
-          // Play via Web Speech API (Text To Speech)
-          const withoutPrefix = audio.url.substring(6);
-          const queryIndex = withoutPrefix.indexOf('?');
-          let textPart = withoutPrefix;
-          let queryPart = '';
-          if (queryIndex !== -1) {
-            textPart = withoutPrefix.substring(0, queryIndex);
-            queryPart = withoutPrefix.substring(queryIndex + 1);
-          }
-
-          const text = decodeURIComponent(textPart);
-          const params = new URLSearchParams(queryPart);
-          const rate = parseFloat(params.get('rate') || '1.08');
-          const pitch = parseFloat(params.get('pitch') || '1.15');
-          const voiceName = params.get('voice') || '';
-
-          const utterance = new SpeechSynthesisUtterance(text);
-          utterance.rate = rate;
-          utterance.pitch = pitch;
-
-          if (voiceName) {
-            const selectedVoice = window.speechSynthesis.getVoices().find(v => v.name === voiceName);
-            if (selectedVoice) utterance.voice = selectedVoice;
-          }
-
-          utterance.onend = () => {
-            resolve();
-          };
-
-          utterance.onerror = (e) => {
-            reject(new Error(`Erro no Sintetizador de Voz: ${e.error}`));
-          };
-
-          window.speechSynthesis.speak(utterance);
-        } else {
+      if (isTts && parsedTts) {
+        const ctrl = playNaturalTts({
+          text: parsedTts.text,
+          profileId: parsedTts.profileId,
+          rate: parsedTts.rate,
+          pitch: parsedTts.pitch,
+          browserVoiceName: parsedTts.voice,
+        });
+        await ctrl.promise;
+      } else {
+        await new Promise<void>((resolve, reject) => {
           // Play standard audio element (Recorded or uploaded Base64/Blob URL)
           const playAudio = new Audio(audio.url);
           currentAnnouncementAudioRef.current = playAudio;
@@ -288,10 +284,8 @@ export default function App() {
           playAudio.play().catch((err) => {
             reject(new Error(`Autoplay bloqueado pelo navegador: ${err.message}`));
           });
-        }
-      });
-
-      await playPromise;
+        });
+      }
 
       // Log success
       const successLog: PlayLog = {
@@ -378,27 +372,38 @@ export default function App() {
     triggerAnnouncement(audioId, `Disparo Manual: ${title}`, 1.5, playChime);
   };
 
-  const handleTestSpeak = async (text: string, voiceName?: string, rate: number = 1.08, pitch: number = 1.15) => {
+  const handleTestSpeak = async (options: VoiceTestSpeakOptions) => {
     const isMusicPlayingBefore = musicPlayerRef.current ? musicPlayerRef.current.isPlaying() : false;
     const configuredVol = musicPlayerRef.current ? musicPlayerRef.current.getConfiguredVolume() : 35;
 
-    if (musicPlayerRef.current) {
-      await musicPlayerRef.current.duckForAnnouncement(1500);
-    }
+    options.onLoadingChange?.(true);
+
+    const preWarmPromise = !options.forceBrowserFallback
+      ? getOrSynthesizeSpeechUrl({
+          text: options.text,
+          profileId: options.profileId,
+        }).catch(() => null)
+      : Promise.resolve(null);
+
+    const duckPromise = musicPlayerRef.current
+      ? musicPlayerRef.current.duckForAnnouncement(1500)
+      : Promise.resolve();
+
+    await Promise.all([duckPromise, preWarmPromise]);
+    options.onLoadingChange?.(false);
 
     try {
-      await new Promise<void>((resolve) => {
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.rate = rate;
-        utterance.pitch = pitch;
-        if (voiceName) {
-          const v = window.speechSynthesis.getVoices().find(v => v.name === voiceName);
-          if (v) utterance.voice = v;
-        }
-        utterance.onend = () => resolve();
-        utterance.onerror = () => resolve();
-        window.speechSynthesis.speak(utterance);
+      const ctrl = playNaturalTts({
+        text: options.text,
+        profileId: options.profileId,
+        rate: options.rate,
+        browserVoiceName: options.browserVoiceName,
+        forceBrowserFallback: options.forceBrowserFallback,
+        onLoadingChange: options.onLoadingChange,
+        onStart: options.onStart,
       });
+      options.onControllerReady?.(ctrl);
+      await ctrl.promise;
     } finally {
       if (musicPlayerRef.current) {
         if (isMusicPlayingBefore) {
