@@ -366,7 +366,6 @@ export function AudioCreator({ audios, onAudioCreated, onAudioDeleted }: AudioCr
           profileId: parsed.profileId,
           rate: parsed.rate,
           pitch: parsed.pitch,
-          browserVoiceName: parsed.voice,
           onLoadingChange: (loading) => setLoadingAudioId(loading ? audio.id : null),
           onStart: () => setPlayingAudioId(audio.id),
         });

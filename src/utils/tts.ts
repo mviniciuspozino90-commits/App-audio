@@ -6,6 +6,8 @@ export interface NaturalVoiceProfile {
   neuralVoice: 'Kore' | 'Zephyr' | 'Charon' | 'Puck' | 'Fenrir';
   rate: number;
   pitch: number;
+  fallbackPitch: number;
+  fallbackRate: number;
   style: string;
   description: string;
   badge: string;
@@ -17,15 +19,17 @@ export const NATURAL_VOICE_PROFILES: NaturalVoiceProfile[] = [
   {
     id: 'camila_natural',
     name: 'Camila (Feminina Natural & Suave)',
-    shortName: 'Camila • Feminina Natural',
+    shortName: 'Camila • Feminina Suave',
     gender: 'F',
     neuralVoice: 'Kore',
     rate: 1.0,
     pitch: 1.0,
+    fallbackPitch: 1.02,
+    fallbackRate: 0.96,
     style:
-      'Speak in natural Brazilian Portuguese as Camila, a warm, friendly, and welcoming female gym hostess. Use smooth human intonation, natural breathing pauses, and gentle warmth—authentic and conversational, never robotic or monotonous.',
-    description: 'Voz feminina humana, acolhedora e cristalina em Português do Brasil. Zero tom robótico.',
-    badge: 'RECOMENDADA',
+      'Speak in natural Brazilian Portuguese as Camila, a warm, gentle, and welcoming female gym hostess. Use smooth human intonation, natural breathing pauses, and soft warmth—authentic and conversational, never robotic.',
+    description: 'Voz feminina acolhedora, suave e cristalina em Português do Brasil.',
+    badge: 'FEMININA',
   },
   {
     id: 'julia_energetic',
@@ -33,25 +37,14 @@ export const NATURAL_VOICE_PROFILES: NaturalVoiceProfile[] = [
     shortName: 'Júlia • Feminina Enérgica',
     gender: 'F',
     neuralVoice: 'Zephyr',
-    rate: 1.02,
+    rate: 1.04,
     pitch: 1.0,
+    fallbackPitch: 1.24,
+    fallbackRate: 1.1,
     style:
-      'Speak in natural Brazilian Portuguese as Júlia, a bright, upbeat, and motivating female fitness presenter. Keep a lively, cheerful, and authentic human cadence with clear articulation—never synthetic or robotic.',
-    description: 'Voz feminina jovem e vibrante, perfeita para chamadas de aulas, spinning e treinos.',
+      'Speak in natural Brazilian Portuguese as Júlia, a bright, upbeat, and motivating female fitness presenter. Keep a lively, cheerful, and authentic human cadence with clear articulation—never robotic.',
+    description: 'Voz feminina jovem, alegre e vibrante para aulas, spinning e treinos.',
     badge: 'FITNESS',
-  },
-  {
-    id: 'helena_calm',
-    name: 'Helena (Feminina Calma & Elegante)',
-    shortName: 'Helena • Feminina Calma',
-    gender: 'F',
-    neuralVoice: 'Kore',
-    rate: 0.95,
-    pitch: 1.0,
-    style:
-      'Speak in natural Brazilian Portuguese as Helena, a calm, polite, and soothing female announcer. Use soft, relaxed human pacing with gentle warmth and clear pauses—ideal for closing reminders and etiquette.',
-    description: 'Locução feminina serena e simpática, ideal para avisos de fechamento e convivência.',
-    badge: 'SUAVE',
   },
   {
     id: 'lucas_natural',
@@ -61,14 +54,34 @@ export const NATURAL_VOICE_PROFILES: NaturalVoiceProfile[] = [
     neuralVoice: 'Charon',
     rate: 1.0,
     pitch: 1.0,
+    fallbackPitch: 0.78,
+    fallbackRate: 0.98,
     style:
       'Speak in natural Brazilian Portuguese as Lucas, a warm, friendly, and clear male gym announcer. Use smooth human intonation and natural cadence—never robotic.',
-    description: 'Voz masculina humana e clara, caso prefira alternar para uma locução masculina.',
+    description: 'Voz masculina humana e clara, ideal para avisos objetivos.',
     badge: 'MASCULINA',
+  },
+  {
+    id: 'rafael_deep',
+    name: 'Rafael (Locutor Grave & Impactante)',
+    shortName: 'Rafael • Locutor Grave',
+    gender: 'M',
+    neuralVoice: 'Fenrir',
+    rate: 0.95,
+    pitch: 1.0,
+    fallbackPitch: 0.6,
+    fallbackRate: 0.88,
+    style:
+      'Speak in natural Brazilian Portuguese as Rafael, a confident, deep-voiced professional radio and gym announcer with rich, smooth human cadence—never robotic.',
+    description: 'Locução masculina grave e marcante, estilo rádio profissional.',
+    badge: 'LOCUTOR',
   },
 ];
 
 export function getVoiceProfileById(profileId?: string | null): NaturalVoiceProfile {
+  if (profileId === 'helena_calm') {
+    return NATURAL_VOICE_PROFILES[0];
+  }
   return (
     NATURAL_VOICE_PROFILES.find((p) => p.id === profileId) ||
     NATURAL_VOICE_PROFILES[0]
@@ -158,6 +171,27 @@ export function buildTtsUrl(options: {
 const TTS_CACHE_DB = 'I9FitTtsCache_v1';
 const TTS_CACHE_STORE = 'clips';
 const memoryAudioUrlCache = new Map<string, string>();
+
+let neuralQuotaExceeded = false;
+const quotaListeners = new Set<(exceeded: boolean) => void>();
+
+export function isNeuralTtsQuotaExceeded(): boolean {
+  return neuralQuotaExceeded;
+}
+
+export function subscribeNeuralQuotaChange(cb: (exceeded: boolean) => void): () => void {
+  quotaListeners.add(cb);
+  return () => {
+    quotaListeners.delete(cb);
+  };
+}
+
+function setNeuralQuotaExceeded(exceeded: boolean) {
+  if (neuralQuotaExceeded !== exceeded) {
+    neuralQuotaExceeded = exceeded;
+    quotaListeners.forEach((cb) => cb(exceeded));
+  }
+}
 
 function openTtsCacheDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -252,6 +286,9 @@ export async function getOrSynthesizeSpeechUrl(options: {
     });
 
     if (!response.ok) {
+      if (response.status === 429) {
+        setNeuralQuotaExceeded(true);
+      }
       return null;
     }
 
@@ -260,6 +297,7 @@ export async function getOrSynthesizeSpeechUrl(options: {
       return null;
     }
 
+    setNeuralQuotaExceeded(false);
     const blob = base64ToWavBlob(data.audioBase64, data.mimeType || 'audio/wav');
     await saveCachedBlobToDb(cacheKey, blob);
     const url = URL.createObjectURL(blob);
@@ -273,7 +311,15 @@ export async function getOrSynthesizeSpeechUrl(options: {
   }
 }
 
-export function pickBestBrowserFemalePtVoice(preferredVoiceName?: string): SpeechSynthesisVoice | null {
+const FEMALE_NAME_PATTERN =
+  /francisca|thalita|raquel|brenda|leila|yara|maria|luciana|joana|amalia|amália|gabriela|helena|ana|zira|yasmin|sara|claudia|cláudia|vitoria|vitória|female|mulher|feminina|google português/i;
+const MALE_NAME_PATTERN =
+  /daniel|antonio|antônio|felipe|filipe|ricardo|thiago|tiago|marcos|gustavo|pedro|donato|fabio|fábio|humberto|julio|júlio|nicolau|valerio|valério|duarte|male|homem|masculin/i;
+
+export function pickBrowserVoiceForProfile(
+  profile: NaturalVoiceProfile,
+  preferredVoiceName?: string
+): SpeechSynthesisVoice | null {
   if (typeof window === 'undefined' || !('speechSynthesis' in window)) return null;
   const voices = window.speechSynthesis.getVoices();
   if (!voices.length) return null;
@@ -286,35 +332,33 @@ export function pickBestBrowserFemalePtVoice(preferredVoiceName?: string): Speec
   const ptVoices = voices.filter((v) => v.lang.toLowerCase().startsWith('pt'));
   const pool = ptVoices.length > 0 ? ptVoices : voices;
 
-  // Prefer natural/neural female pt-BR voices if available on the OS/browser
-  const priorityPatterns = [
-    /francisca/i,
-    /thalita/i,
-    /raquel/i,
-    /brenda/i,
-    /leila/i,
-    /yara/i,
-    /google português do brasil/i,
-    /google português/i,
-    /luciana/i,
-    /maria/i,
-    /natural/i,
-    /neural/i,
-    /online/i,
-    /female|mulher|feminina/i,
-  ];
+  const femaleVoices = pool.filter((v) => FEMALE_NAME_PATTERN.test(v.name) && !MALE_NAME_PATTERN.test(v.name));
+  const maleVoices = pool.filter((v) => MALE_NAME_PATTERN.test(v.name));
 
-  for (const pattern of priorityPatterns) {
-    const match = pool.find((v) => pattern.test(v.name) && v.lang.toLowerCase().includes('br'));
-    if (match) return match;
+  if (profile.gender === 'M') {
+    if (maleVoices.length > 0) {
+      if (profile.id === 'rafael_deep' && maleVoices.length > 1) {
+        return maleVoices[1];
+      }
+      return maleVoices[0];
+    }
+    return pool[0] || null;
   }
 
-  for (const pattern of priorityPatterns) {
-    const match = pool.find((v) => pattern.test(v.name));
-    if (match) return match;
+  if (femaleVoices.length > 0) {
+    // Prefer distinct female voices when multiple exist (e.g. Microsoft Maria + Google Português do Brasil)
+    if (profile.id === 'julia_energetic' && femaleVoices.length > 1) {
+      return femaleVoices[1];
+    }
+    const brFemale = femaleVoices.find((v) => v.lang.toLowerCase().includes('br'));
+    return brFemale || femaleVoices[0];
   }
 
   return pool[0] || null;
+}
+
+export function pickBestBrowserFemalePtVoice(preferredVoiceName?: string): SpeechSynthesisVoice | null {
+  return pickBrowserVoiceForProfile(NATURAL_VOICE_PROFILES[0], preferredVoiceName);
 }
 
 export interface PlayTtsController {
@@ -422,7 +466,31 @@ export function playNaturalTts(options: {
 
     if (stopped) return;
 
-    // Graceful fallback: browser SpeechSynthesis tuned to sound as natural & feminine as possible
+    // Ensure browser voices list has finished async initialization if empty
+    if (
+      typeof window !== 'undefined' &&
+      'speechSynthesis' in window &&
+      window.speechSynthesis.getVoices().length === 0
+    ) {
+      await new Promise<void>((resolve) => {
+        let done = false;
+        const finish = () => {
+          if (done) return;
+          done = true;
+          resolve();
+        };
+        const timer = setTimeout(finish, 250);
+        const handler = () => {
+          clearTimeout(timer);
+          finish();
+        };
+        window.speechSynthesis.addEventListener('voiceschanged', handler, { once: true });
+      });
+    }
+
+    if (stopped) return;
+
+    // Distinct browser SpeechSynthesis fallback tuned per voice profile
     await new Promise<void>((resolve, reject) => {
       if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
         reject(new Error('Sintetizador de voz indisponível neste navegador.'));
@@ -437,14 +505,16 @@ export function playNaturalTts(options: {
 
       const utterance = new SpeechSynthesisUtterance(cleanText);
       utterance.lang = 'pt-BR';
-      // Keep pitch & rate close to 1.0 so browser voice avoids artificial robotic distortion
-      utterance.rate = Math.max(0.85, Math.min(1.15, playbackRate));
-      utterance.pitch = Math.max(0.92, Math.min(1.08, options.pitch ?? 1.02));
 
-      const voice = pickBestBrowserFemalePtVoice(options.browserVoiceName);
+      const voice = pickBrowserVoiceForProfile(profile, options.browserVoiceName);
       if (voice) {
         utterance.voice = voice;
       }
+
+      // Differentiate pitch & rate clearly per profile when using local fallback
+      const rateScale = playbackRate / (profile.rate || 1.0);
+      utterance.rate = Math.max(0.75, Math.min(1.25, profile.fallbackRate * rateScale));
+      utterance.pitch = Math.max(0.55, Math.min(1.35, profile.fallbackPitch));
 
       utterance.onstart = () => {
         options.onStart?.();

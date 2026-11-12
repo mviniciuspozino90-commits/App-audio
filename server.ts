@@ -64,51 +64,69 @@ function getAiClient(): GoogleGenAI | null {
   return aiClient;
 }
 
+async function callTtsModel(
+  ai: GoogleGenAI,
+  model: string,
+  text: string,
+  voiceName: string,
+  style: string
+): Promise<string> {
+  const response = await ai.models.generateContent({
+    model,
+    contents: [
+      {
+        role: 'user',
+        parts: [
+          {
+            text,
+            speechMetadata: {
+              style,
+            },
+          },
+        ],
+      },
+    ],
+    config: {
+      responseModalities: ['AUDIO'],
+      speechConfig: {
+        voiceConfig: {
+          prebuiltVoiceConfig: { voiceName },
+        },
+      },
+    },
+  });
+
+  const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+  if (!base64Audio) {
+    throw new Error('A resposta do modelo de voz não retornou dados de áudio.');
+  }
+  return base64Audio;
+}
+
 async function generateSpeechWithRetry(
   ai: GoogleGenAI,
   text: string,
   voiceName: string,
   style: string,
-  maxRetries = 2
+  maxRetries = 1
 ): Promise<string> {
   let lastError: unknown;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
-      const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash-lite-tts',
-        contents: [
-          {
-            role: 'user',
-            parts: [
-              {
-                text,
-                speechMetadata: {
-                  style,
-                },
-              },
-            ],
-          },
-        ],
-        config: {
-          responseModalities: ['AUDIO'],
-          speechConfig: {
-            voiceConfig: {
-              prebuiltVoiceConfig: { voiceName },
-            },
-          },
-        },
-      });
-
-      const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-      if (!base64Audio) {
-        throw new Error('A resposta do modelo de voz não retornou dados de áudio.');
-      }
-      return base64Audio;
+      return await callTtsModel(ai, 'gemini-3.8-flash-lite-tts', text, voiceName, style);
     } catch (err: unknown) {
       lastError = err;
       const status = (err as { status?: number })?.status;
-      if (attempt < maxRetries && (status === 429 || status === 503 || status === 500)) {
-        await new Promise((r) => setTimeout(r, 600 * Math.pow(2, attempt)));
+      if (status === 429) {
+        // Free-tier per-model quota hit on flash-lite-tts: try flagship flash-tts once
+        try {
+          return await callTtsModel(ai, 'gemini-3.8-flash-tts', text, voiceName, style);
+        } catch (fallbackErr: unknown) {
+          throw fallbackErr;
+        }
+      }
+      if (attempt < maxRetries && (status === 503 || status === 500)) {
+        await new Promise((r) => setTimeout(r, 500 * Math.pow(2, attempt)));
         continue;
       }
       throw err;
@@ -183,6 +201,7 @@ async function startServer() {
       const status = (err as { status?: number })?.status;
       res.status(status && status >= 400 && status < 600 ? status : 500).json({
         error: message,
+        code: status === 429 ? 'QUOTA_EXCEEDED' : 'TTS_ERROR',
       });
     }
   });

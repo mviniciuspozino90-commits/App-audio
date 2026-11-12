@@ -247,12 +247,14 @@ export default function App() {
     // Phase 2: Play the selected audio
     try {
       if (isTts && parsedTts) {
+        const isVoiceOverridden = Boolean(
+          voiceProfileId && voiceProfileId !== parsedTts.profileId
+        );
         const ctrl = playNaturalTts({
           text: parsedTts.text,
           profileId: effectiveVoiceProfileId,
-          rate: parsedTts.rate,
+          rate: isVoiceOverridden ? undefined : parsedTts.rate,
           pitch: parsedTts.pitch,
-          browserVoiceName: parsedTts.voice,
         });
         await ctrl.promise;
       } else {

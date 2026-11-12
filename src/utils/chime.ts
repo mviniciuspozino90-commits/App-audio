@@ -82,7 +82,6 @@ export async function playAlertChime(options?: {
     const ctrl = playNaturalTts({
       text: 'Atenção!',
       profileId: voiceProfileId,
-      rate: 1.0,
     });
     await ctrl.promise.catch(() => {});
     return;
@@ -92,7 +91,6 @@ export async function playAlertChime(options?: {
     const ctrl = playNaturalTts({
       text: 'Atenção, alunos!',
       profileId: voiceProfileId,
-      rate: 1.0,
     });
     await ctrl.promise.catch(() => {});
   }

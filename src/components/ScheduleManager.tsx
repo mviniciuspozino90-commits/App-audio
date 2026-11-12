@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Schedule, AnnouncementAudio, AlertSoundMode } from '../types';
 import {
   Calendar, Plus, Trash2, Play, Check, Clock, AlertTriangle,
@@ -10,9 +10,12 @@ import {
   NATURAL_VOICE_PROFILES,
   DEFAULT_VOICE_PROFILE_ID,
   getVoiceProfileById,
+  parseTtsUrl,
   buildTtsUrl,
   playNaturalTts,
   getOrSynthesizeSpeechUrl,
+  isNeuralTtsQuotaExceeded,
+  subscribeNeuralQuotaChange,
   PlayTtsController,
 } from '../utils/tts';
 
@@ -70,7 +73,20 @@ export function ScheduleManager({ schedules, audios, onSchedulesUpdated, onManua
   const [isTestingVoice, setIsTestingVoice] = useState(false);
   const [isLoadingTestVoice, setIsLoadingTestVoice] = useState(false);
   const [isTestingAlert, setIsTestingAlert] = useState(false);
+  const [neuralQuotaReached, setNeuralQuotaReached] = useState(() => isNeuralTtsQuotaExceeded());
   const previewCtrlRef = useRef<PlayTtsController | null>(null);
+
+  useEffect(() => {
+    return subscribeNeuralQuotaChange((exceeded) => {
+      setNeuralQuotaReached(exceeded);
+    });
+  }, []);
+
+  const selectedExistingAudio = audios.find((a) => a.id === selectedAudioId);
+  const isSelectedExistingFile =
+    sourceMode === 'existing' &&
+    Boolean(selectedExistingAudio) &&
+    !selectedExistingAudio!.url.startsWith('tts://');
 
   const openAddForm = () => {
     const nextOpen = !isAdding;
@@ -104,10 +120,16 @@ export function ScheduleManager({ schedules, audios, onSchedulesUpdated, onManua
       return;
     }
 
+    const existingTtsText =
+      sourceMode === 'existing' && selectedExistingAudio?.url.startsWith('tts://')
+        ? parseTtsUrl(selectedExistingAudio.url).text.trim()
+        : '';
+
     const sampleText =
       sourceMode === 'inline_tts' && inlineTtsText.trim()
         ? inlineTtsText.trim()
-        : 'Atenção alunos! Este é um teste da voz programada para os avisos da I9 Fit.';
+        : existingTtsText ||
+          'Atenção alunos! Este é um teste da voz programada para os avisos da I9 Fit.';
 
     const ctrl = playNaturalTts({
       text: sampleText,
@@ -354,10 +376,14 @@ export function ScheduleManager({ schedules, audios, onSchedulesUpdated, onManua
                   id="schedule-audio-select"
                   value={selectedAudioId}
                   onChange={(e) => {
-                    setSelectedAudioId(e.target.value);
-                    const selected = audios.find((a) => a.id === e.target.value);
+                    const nextId = e.target.value;
+                    setSelectedAudioId(nextId);
+                    const selected = audios.find((a) => a.id === nextId);
                     if (selected && !title) {
                       setTitle(selected.name);
+                    }
+                    if (selected && selected.url.startsWith('tts://')) {
+                      setSelectedVoiceProfileId(parseTtsUrl(selected.url).profileId);
                     }
                   }}
                   className="w-full text-sm border border-zinc-850 rounded-lg p-1.5 bg-zinc-950 text-zinc-300 focus:outline-none focus:border-neon"
@@ -451,6 +477,16 @@ export function ScheduleManager({ schedules, audios, onSchedulesUpdated, onManua
                 );
               })}
             </div>
+            {isSelectedExistingFile && (
+              <p className="text-[10px] text-amber-300/90 font-medium">
+                Áudio gravado/enviado selecionado: a voz escolhida acima será aplicada na chamada de alerta ("Atenção!"), preservando o áudio original do arquivo.
+              </p>
+            )}
+            {neuralQuotaReached && (
+              <p className="text-[10px] text-zinc-400 font-medium">
+                Limite diário da voz neural IA atingido hoje — usando vozes locais diferenciadas por perfil automaticamente.
+              </p>
+            )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -550,7 +586,7 @@ export function ScheduleManager({ schedules, audios, onSchedulesUpdated, onManua
                   Alerta Sonoro de Abertura
                 </p>
                 <p className="text-[10px] text-zinc-500 leading-normal">
-                  Escolha o sinal sonoro e/ou chamada de voz feminina que precede o anúncio.
+                  Escolha o sinal sonoro e/ou chamada de voz que precede o anúncio.
                 </p>
               </div>
             </div>

@@ -11,6 +11,8 @@ import {
   playNaturalTts,
   PlayTtsController,
   pickBestBrowserFemalePtVoice,
+  isNeuralTtsQuotaExceeded,
+  subscribeNeuralQuotaChange,
 } from '../utils/tts';
 
 const PRESET_TEST_PHRASES = [
@@ -58,6 +60,7 @@ export function VoiceTester({ onTestSpeak, onTestChime }: VoiceTesterProps) {
   const [browserVoices, setBrowserVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [selectedBrowserVoice, setSelectedBrowserVoice] = useState<string>('');
   const [useBrowserFallback, setUseBrowserFallback] = useState<boolean>(false);
+  const [neuralQuotaReached, setNeuralQuotaReached] = useState<boolean>(() => isNeuralTtsQuotaExceeded());
 
   // Audio test states
   const [testText, setTestText] = useState<string>(PRESET_TEST_PHRASES[4].text);
@@ -93,7 +96,12 @@ export function VoiceTester({ onTestSpeak, onTestChime }: VoiceTesterProps) {
       window.speechSynthesis.onvoiceschanged = updateVoicesList;
     }
 
+    const unsubscribeQuota = subscribeNeuralQuotaChange((exceeded) => {
+      setNeuralQuotaReached(exceeded);
+    });
+
     return () => {
+      unsubscribeQuota();
       if (animationRef.current) cancelAnimationFrame(animationRef.current);
       if (activeControllerRef.current) {
         activeControllerRef.current.stop();
@@ -136,7 +144,7 @@ export function VoiceTester({ onTestSpeak, onTestChime }: VoiceTesterProps) {
       text: testText,
       profileId: selectedProfileId,
       rate,
-      browserVoiceName: selectedBrowserVoice,
+      browserVoiceName: useBrowserFallback ? selectedBrowserVoice : undefined,
       forceBrowserFallback: useBrowserFallback,
       onLoadingChange: (loading) => setIsLoading(loading),
       onStart: () => setIsSpeaking(true),
@@ -212,10 +220,16 @@ export function VoiceTester({ onTestSpeak, onTestChime }: VoiceTesterProps) {
         </div>
 
         <div className="flex items-center gap-2">
-          <span className="flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full font-mono">
-            <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-            Voz Neural Natural (PT-BR)
-          </span>
+          {neuralQuotaReached ? (
+            <span className="flex items-center gap-1.5 bg-amber-500/10 border border-amber-500/25 text-amber-300 text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full font-mono">
+              Modo Local Ativo (Limite diário IA)
+            </span>
+          ) : (
+            <span className="flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full font-mono">
+              <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+              Voz Neural Natural (PT-BR)
+            </span>
+          )}
         </div>
       </div>
 
